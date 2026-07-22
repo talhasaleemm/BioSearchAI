@@ -1,10 +1,10 @@
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import String, DateTime
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
+from app.models import Base
 
 
 class User(Base):
@@ -12,11 +12,13 @@ class User(Base):
 
     __tablename__ = "users"
 
-    id: int = Column(Integer, primary_key=True, index=True)
-    email: str = Column(String(255), unique=True, index=True, nullable=False)
-    hashed_password: str = Column(String(255), nullable=False)
-    created_at: datetime = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )
 
-    search_sessions: list["SearchSession"] = relationship(
-        "SearchSession", back_populates="user", cascade="all, delete-orphan"
+    search_sessions: Mapped[list["SearchSession"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
     )
