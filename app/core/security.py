@@ -35,21 +35,23 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return password_hash.verify(plain_password, hashed_password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[datetime] = None) -> str:
+from datetime import timedelta
+
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Create a JWT access token.
 
     Args:
         data: Payload data to encode into the token (typically user id/email).
-        expires_delta: Optional datetime for token expiration.
+        expires_delta: Optional timedelta for token expiration.
 
     Returns:
         Encoded JWT token string.
     """
     to_encode = data.copy()
     if expires_delta:
-        expire = expires_delta
+        expire = datetime.now(timezone.utc) + expires_delta
     else:
-        expire = datetime.now(timezone.utc)
+        expire = datetime.now(timezone.utc) + timedelta(minutes=get_settings().ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, get_settings().SECRET_KEY, algorithm=get_settings().ALGORITHM)
     return encoded_jwt
