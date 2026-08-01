@@ -12,8 +12,8 @@ from app.routers import auth, search, history
 from app.api.v1.endpoints import search as search_v1
 from app.api.v1.endpoints import rag as rag_v1
 from app.api.v1.endpoints import documents as documents_v1
-
-settings = get_settings()
+import asyncio
+from app.tasks.faiss_sync import periodic_faiss_sync
 app = FastAPI(title="BioSearchAI", version="0.1.0")
 
 app.add_middleware(
@@ -45,3 +45,6 @@ async def on_startup() -> None:
         Base.metadata.create_all(bind=engine)
     except Exception:
         pass
+        
+    # Start the FAISS background sync task
+    asyncio.create_task(periodic_faiss_sync(interval_seconds=30))

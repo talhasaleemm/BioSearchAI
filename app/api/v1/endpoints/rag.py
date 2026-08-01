@@ -41,7 +41,7 @@ async def generate_rag_answer(payload: RAGRequest, db: Session = Depends(get_db)
         )
 
     try:
-        response = get_rag_engine().generate_answer(
+        response = await get_rag_engine().generate_answer(
             db=db,
             query=payload.query,
             top_k=payload.top_k,

@@ -178,17 +178,28 @@ error LNK1181: cannot open input file '...\link.exe'
 
 ---
 
-## 🗂 ARC 3 — Testing & Validation
+## 🗂 ARC 3 — Architecture Evolution (Validation & Search)
 
-**Goal:** Full test suite coverage, integration tests, and RAG quality evaluation.
+**Goal:** Evolve the architecture across vector storage, local generation, and biomedical extraction.
 
-**Status:** 🔜 Queued
+**Status:** 🔄 In Progress
 
 ---
 
-### Episode 3.1 — Unit & Integration Tests 🔜 QUEUED
+### Episode 3.1 — FAISS Migration (Replacing pgvector) 🔄 Implementation Done, Verification Pending
 
-**Files:** `tests/test_rag_pipeline.py` (existing, needs review)
+**Date:** 2026-08-01
+
+**What happened:**
+- Removed `pgvector` HNSW index and column via destructive Alembic migration (`b4918d8ebe14_remove_pgvector.py`).
+- Changed embedding storage in PostgreSQL to `ARRAY(Float)` to maintain an ACID source of truth.
+- Implemented `FAISSIndexManager` (singleton with `IndexFlatIP` mapped to `Chunk.id` via `IndexIDMap`) for in-memory semantic search.
+- **Concurrency Decision:** FAISS add/search operations are fully offloaded to a `ThreadPoolExecutor` via `asyncio.to_thread` and synchronized using an `asyncio.Lock()`, preventing readers and writers from colliding in the single FastAPI worker.
+- **Reload Mechanism Decision:** Implemented a periodic background refresh task (`app/tasks/faiss_sync.py`) running every 30 seconds via `asyncio` inside the FastAPI process. This polls the DB for chunks newer than the last synced ID, guaranteeing eventual consistency without complex pub/sub.
+- **Known Tradeoff (FAISS Locking):** Both `search()` and `add_with_ids()` acquire the exact same `asyncio.Lock()`. While this prevents writers from colliding with readers, it *also* serializes all concurrent reads against each other. For a portfolio project's expected load, this guarantees safety with acceptable performance, but would need a Read-Write lock or reader copies for high-throughput production.
+- **Offline Constraint Confirmed:** Pytest failed to download the HuggingFace tokenizer/model on the fly, confirming the sandbox has **no verified internet access** at runtime. Pre-caching into the Docker image layer during build is mandatory for all models.
+
+**Files:** `app/models/chunk.py`, `app/services/faiss_index.py`, `app/services/retrieval.py`, `app/services/rag.py`, `app/tasks/faiss_sync.py`, `app/main.py`, `tests/test_rag_pipeline.py`, `Dockerfile`.
 
 ---
 

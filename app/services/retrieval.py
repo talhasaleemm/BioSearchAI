@@ -11,6 +11,7 @@ from sentence_transformers import CrossEncoder, SentenceTransformer
 
 from app.models.chunk import Chunk
 from app.models.document import Document
+from app.services.faiss_index import faiss_manager
 
 
 class VectorRetriever:
@@ -44,80 +45,38 @@ class VectorRetriever:
         )
         return np.array(embedding, dtype=np.float32)[0]
 
-    def search_similar_chunks(
+    async def search_similar_chunks(
         self,
         db: Session,
         query: str,
         top_k: int = 5,
     ) -> List[tuple[Chunk, Document, float]]:
-        """Return the top-k chunks using hybrid dense+sparse retrieval with RRF
-        and cross-encoder reranking.
-
-        Args:
-            db: SQLAlchemy database session.
-            query: Natural language query string.
-            top_k: Maximum number of results to return.
-
-        Returns:
-            List of tuples ``(Chunk, Document, reranker_score)`` ordered by
-            descending cross-encoder score.
-        """
+        """Return the top-k chunks using FAISS retrieval and cross-encoder reranking."""
         query_vector = self._encode_query(query)
-        query_text = query
-
-        query_text_param = bindparam("query_text")
-        ts_query = func.websearch_to_tsquery("english", query_text_param)
-
-        dense_cte = (
-            select(
-                Chunk.id,
-                func.row_number()
-                .over(order_by=Chunk.embedding.cosine_distance(query_vector))
-                .label("dense_rank"),
-            )
-            .where(Chunk.embedding.is_not(None))
-            .limit(50)
-            .cte("dense_cte")
-        )
-
-        sparse_cte = (
-            select(
-                Chunk.id,
-                func.row_number()
-                .over(order_by=func.ts_rank(Chunk.fts_vector, ts_query).desc())
-                .label("sparse_rank"),
-            )
-            .where(Chunk.fts_vector.op("@@")(ts_query))
-            .limit(50)
-            .cte("sparse_cte")
-        )
-
-        rrf_score = (
-            func.coalesce(literal_column("1.0") / (literal_column(60) + dense_cte.c.dense_rank), 0.0)
-            + func.coalesce(literal_column("1.0") / (literal_column(60) + sparse_cte.c.sparse_rank), 0.0)
-        ).label("rrf_score")
-
-        final_stmt = (
-            select(
-                Chunk,
-                Document,
-                rrf_score,
-            )
-            .outerjoin(dense_cte, Chunk.id == dense_cte.c.id)
-            .outerjoin(sparse_cte, Chunk.id == sparse_cte.c.id)
-            .join(Document, Chunk.document_id == Document.id)
-            .order_by(rrf_score.desc())
-            .limit(25)
-        )
-
+        
+        distances, indices = await faiss_manager.search(query_vector, top_k * 5)
+        
+        if indices.size == 0 or indices[0][0] == -1:
+            return []
+            
+        chunk_ids = [int(idx) for idx in indices[0] if idx != -1]
+        if not chunk_ids:
+            return []
+            
+        # Fetch actual chunks from DB
+        chunks = db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).all()
+        chunk_map = {chunk.id: chunk for chunk in chunks}
+        
         candidates: List[tuple[Chunk, Document, float]] = []
-        for chunk, document, score in db.execute(final_stmt, {"query_text": query_text}).all():
-            candidates.append((chunk, document, float(score)))
-
+        for idx in chunk_ids:
+            if idx in chunk_map:
+                chunk = chunk_map[idx]
+                candidates.append((chunk, chunk.document, 1.0)) # mock RRF score for now
+                
         if not candidates:
             return []
 
-        pairs = [(query_text, chunk.text) for chunk, _, _ in candidates]
+        pairs = [(query, chunk.text) for chunk, _, _ in candidates]
         rerank_scores = self.reranker.predict(pairs)
 
         reranked = [

@@ -114,7 +114,8 @@ def test_search_empty_query_returns_400() -> None:
     assert response.json()["detail"] == "Query must not be empty."
 
 
-def test_retrieval_pipeline(db_session: Session, test_document: Document) -> None:
+@pytest.mark.asyncio
+async def test_retrieval_pipeline(db_session: Session, test_document: Document) -> None:
     from app.data_pipeline.vectorize import chunk_documents, generate_embeddings, save_embeddings_to_db
     from app.services.retrieval import VectorRetriever
 
@@ -125,7 +126,7 @@ def test_retrieval_pipeline(db_session: Session, test_document: Document) -> Non
     save_embeddings_to_db(db_session, chunks, embeddings)
 
     retriever = VectorRetriever()
-    results = retriever.search_similar_chunks(db=db_session, query="TP53 tumor suppressor", top_k=5)
+    results = await retriever.search_similar_chunks(db=db_session, query="TP53 tumor suppressor", top_k=5)
 
     assert len(results) >= 1
     for chunk, document, score in results:
@@ -136,7 +137,8 @@ def test_retrieval_pipeline(db_session: Session, test_document: Document) -> Non
 
 
 @pytest.mark.skipif(OPENAI_KEY is None, reason="OPENAI_API_KEY is required for E2E LLM tests")
-def test_llm_generation(db_session: Session, test_document: Document) -> None:
+@pytest.mark.asyncio
+async def test_llm_generation(db_session: Session, test_document: Document) -> None:
     from app.data_pipeline.vectorize import chunk_documents, generate_embeddings, save_embeddings_to_db
     from app.services.rag import RAGEngine
 
@@ -145,7 +147,7 @@ def test_llm_generation(db_session: Session, test_document: Document) -> None:
     save_embeddings_to_db(db_session, chunks, embeddings)
 
     engine = RAGEngine()
-    response = engine.generate_answer(db=db_session, query="What is the role of TP53 in cancer?", top_k=3)
+    response = await engine.generate_answer(db=db_session, query="What is the role of TP53 in cancer?", top_k=3)
 
     assert response.query == "What is the role of TP53 in cancer?"
     assert response.answer

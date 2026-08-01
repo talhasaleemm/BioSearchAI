@@ -173,11 +173,18 @@ def generate_embeddings(chunks: List[Chunk], model_name: str = "pritamdeka/S-Pub
     return np.array(embeddings, dtype=np.float32)
 
 
+import asyncio
+from app.services.faiss_index import faiss_manager
+
 def save_embeddings_to_db(db: Session, chunks: List[Chunk], embeddings: np.ndarray) -> None:
-    """Persist generated embeddings to the PostgreSQL pgvector column."""
+    """Persist generated embeddings to the PostgreSQL ARRAY column and FAISS."""
     for chunk, vector in zip(chunks, embeddings):
         chunk.embedding = vector.tolist()
     db.commit()
+    
+    # Also ingest into the local process FAISS singleton (useful if run in the web process directly)
+    ids = np.array([chunk.id for chunk in chunks], dtype=np.int64)
+    asyncio.run(faiss_manager.add_with_ids(embeddings, ids))
 
 
 def run_vectorization(chunk_size_tokens: int = 450, overlap_tokens: int = 50, model_name: str = "pritamdeka/S-PubMedBert-MS-MARCO") -> dict:

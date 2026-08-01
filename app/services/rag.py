@@ -65,7 +65,7 @@ class RAGEngine:
             )
         return self._client
 
-    def generate_answer(self, db: Session, query: str, top_k: int = 5, temperature: float = 0.2) -> RAGResponse:
+    async def generate_answer(self, db: Session, query: str, top_k: int = 5, temperature: float = 0.2) -> RAGResponse:
         """Run retrieval and generate a grounded answer.
 
         Args:
@@ -77,7 +77,7 @@ class RAGEngine:
         Returns:
             ``RAGResponse`` containing the answer and source list.
         """
-        results = self.retriever.search_similar_chunks(db=db, query=query, top_k=top_k)
+        results = await self.retriever.search_similar_chunks(db=db, query=query, top_k=top_k)
 
         sources: List[ChunkResult] = []
         for chunk, document, similarity in results:
@@ -125,7 +125,7 @@ class RAGEngine:
             SSE-formatted strings. The first payload contains sources metadata,
             followed by streamed completion tokens.
         """
-        results = self.retriever.search_similar_chunks(db=db, query=query, top_k=top_k)
+        results = await self.retriever.search_similar_chunks(db=db, query=query, top_k=top_k)
 
         sources: List[ChunkResult] = []
         for chunk, document, similarity in results:
