@@ -15,7 +15,13 @@ from app.models import SessionLocal
 from app.models.chunk import Chunk
 from app.models.document import Document
 
-tokenizer = AutoTokenizer.from_pretrained("pritamdeka/S-PubMedBert-MS-MARCO")
+_tokenizer = None
+
+def get_tokenizer():
+    global _tokenizer
+    if _tokenizer is None:
+        _tokenizer = AutoTokenizer.from_pretrained("pritamdeka/S-PubMedBert-MS-MARCO")
+    return _tokenizer
 
 _SENTENCE_END_RE = re.compile(r'(?<=[.!?])\s+')
 _BIOMEDICAL_PRESERVE_RE = re.compile(
@@ -35,7 +41,7 @@ def _split_sentences(text: str) -> List[str]:
 
 def _token_count(text: str) -> int:
     """Return the token count for a text string using the BiomedBERT tokenizer."""
-    return len(tokenizer.encode(text, add_special_tokens=False))
+    return len(get_tokenizer().encode(text, add_special_tokens=False))
 
 
 def _trim_overlap(parts: List[str], max_overlap_tokens: int) -> None:
