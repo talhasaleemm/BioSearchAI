@@ -7,7 +7,9 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.db import get_db
+from app.core.deps import get_current_user
 from app.models.document import Document
+from app.models.user import User
 from app.models.search_session import SearchSession
 from app.tasks.worker import process_document_task
 
@@ -33,7 +35,11 @@ class DocumentIngestResponse(BaseModel):
 
 
 @router.post("/ingest", response_model=DocumentIngestResponse, status_code=status.HTTP_202_ACCEPTED)
-async def ingest_document(payload: DocumentIngestRequest, db: Session = Depends(get_db)) -> DocumentIngestResponse:
+async def ingest_document(
+    payload: DocumentIngestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> DocumentIngestResponse:
     """Ingest a new document and trigger async background processing.
 
     Args:
