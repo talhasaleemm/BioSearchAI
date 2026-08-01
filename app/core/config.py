@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     OPENAI_API_BASE: str = "https://api.openai.com/v1"
     OPENAI_MODEL: str = "gpt-4o-mini"
 
-    model_config = {"env_file": ".env"}
+    model_config = {"env_file": ".env", "extra": "ignore"}
 
 
 @lru_cache()
