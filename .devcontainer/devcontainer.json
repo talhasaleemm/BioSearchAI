@@ -1,0 +1,119 @@
+{
+  "name": "BioSearchAI Dev Container",
+
+  // ── Docker Compose integration ──────────────────────────────────────────────
+  // Reuses the existing docker-compose stack instead of a standalone Dockerfile.
+  // docker-compose.override.yml is automatically picked up alongside this.
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "../docker-compose.override.yml"
+  ],
+
+  // The service VS Code attaches to. "web" is the FastAPI container with the
+  // full Python environment and all dependencies already installed.
+  "service": "web",
+
+  // Working directory inside the container — matches the bind-mount target.
+  "workspaceFolder": "/app",
+
+  // ── Lifecycle hooks ─────────────────────────────────────────────────────────
+  "postCreateCommand": "pip install --quiet watchdog && echo '✅ DevContainer ready. Run: docker-compose up'",
+
+  // ── VS Code extensions ──────────────────────────────────────────────────────
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Python core
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+
+        // Linting & formatting
+        "charliermarsh.ruff",
+        "ms-python.black-formatter",
+
+        // Docker & Compose
+        "ms-azuretools.vscode-docker",
+        "ms-vscode-remote.remote-containers",
+
+        // Database
+        "cweijan.vscode-postgresql-client2",
+
+        // Git & productivity
+        "eamodio.gitlens",
+        "streetsidesoftware.code-spell-checker",
+        "gruntfuggly.todo-tree",
+
+        // REST API testing (replaces Postman for quick endpoint checks)
+        "humao.rest-client",
+
+        // YAML / TOML / dotenv support
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "mikestead.dotenv"
+      ],
+
+      "settings": {
+        // ── Python interpreter ──────────────────────────────────────────────
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+
+        // ── Ruff as the primary linter ──────────────────────────────────────
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.fixAll.ruff": "explicit",
+            "source.organizeImports.ruff": "explicit"
+          }
+        },
+
+        // ── Black as fallback formatter ─────────────────────────────────────
+        "black-formatter.args": ["--line-length", "100"],
+
+        // ── Terminal defaults ───────────────────────────────────────────────
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "terminal.integrated.env.linux": {
+          "PYTHONPATH": "/app"
+        },
+
+        // ── Editor quality-of-life ──────────────────────────────────────────
+        "editor.rulers": [100],
+        "editor.tabSize": 4,
+        "editor.insertSpaces": true,
+        "files.trimTrailingWhitespace": true,
+        "files.eol": "\n",
+
+        // ── Pylance type checking ───────────────────────────────────────────
+        "python.analysis.typeCheckingMode": "basic",
+        "python.analysis.extraPaths": ["/app"],
+
+        // ── Test discovery ──────────────────────────────────────────────────
+        "python.testing.pytestEnabled": true,
+        "python.testing.pytestArgs": ["tests"],
+        "python.testing.unittestEnabled": false
+      }
+    }
+  },
+
+  // ── Port forwarding ─────────────────────────────────────────────────────────
+  // VS Code will auto-forward these ports from the container to localhost.
+  "forwardPorts": [
+    8000,   // FastAPI / Uvicorn
+    5432,   // PostgreSQL
+    6379,   // Redis
+    5555    // Celery Flower dashboard
+  ],
+
+  "portsAttributes": {
+    "8000": { "label": "FastAPI", "onAutoForward": "openBrowser" },
+    "5555": { "label": "Celery Flower", "onAutoForward": "silent" },
+    "5432": { "label": "PostgreSQL", "onAutoForward": "silent" },
+    "6379": { "label": "Redis", "onAutoForward": "silent" }
+  },
+
+  // ── Shut down behaviour ──────────────────────────────────────────────────────
+  // Keeps the full Compose stack running even when VS Code closes the
+  // dev container connection. Set to "stopCompose" to tear down on exit.
+  "shutdownAction": "none"
+}

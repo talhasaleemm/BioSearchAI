@@ -1,0 +1,86 @@
+# docker-compose.override.yml
+#
+# LOCAL DEVELOPMENT OVERRIDE — Containerized Workflow
+# =====================================================
+# This file is automatically merged with docker-compose.yml by Docker Compose
+# when you run `docker-compose up`. It is NEVER used in CI or production.
+#
+# Key behaviours this override enables:
+#   1. Bind-mounts local source code into web/worker containers so that
+#      code changes are reflected instantly — no image rebuild required.
+#   2. Swaps the web container command to uvicorn --reload for hot-reloading.
+#   3. Adds watchdog-based Celery auto-restart (--pool=solo --autoreload).
+#   4. Exposes extra ports for debugging (Flower task monitor on 5555).
+#   5. Loads secrets from a local .env file instead of hardcoding them.
+#
+# Usage:
+#   docker-compose up                  # Uses docker-compose.yml + this file
+#   docker-compose up --build          # Rebuilds images then starts (first run)
+#   docker-compose logs -f web         # Tail web container logs
+#   docker-compose logs -f worker      # Tail worker container logs
+
+services:
+
+  web:
+    # ── Source code live-mount ────────────────────────────────────────────────
+    # Maps your local workspace into the container at /app.
+    # Any file save on your host is immediately visible inside the container.
+    volumes:
+      - .:/app
+    # ── Uvicorn hot-reload ────────────────────────────────────────────────────
+    # Overrides the entrypoint.sh command so Uvicorn watches for changes.
+    # Alembic migrations still run via the base entrypoint.sh on first start;
+    # on reload uvicorn restarts only the ASGI app, not the migration step.
+    command: >
+      sh -c "
+        echo 'Running Alembic migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting Uvicorn with --reload...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --reload-dir /app/app
+      "
+    environment:
+      # Override OPENAI_API_KEY from .env for local dev — set your real key there
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-sk-replace-me}"
+      # Tells Uvicorn and any Python logging to output colours
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env
+
+  worker:
+    # ── Source code live-mount ────────────────────────────────────────────────
+    volumes:
+      - .:/app
+    # ── Celery auto-reload ────────────────────────────────────────────────────
+    # --pool=solo        : Single-threaded, no forking — safest for hot-reload
+    #                      and avoids CUDA/model-weight memory duplication.
+    # watchmedo auto-restart: Wraps Celery and restarts it on any .py file change.
+    #                      Requires `watchdog` package (added to requirements.txt).
+    command: >
+      watchmedo auto-restart
+        --directory=/app/app
+        --pattern=*.py
+        --recursive
+        --
+        celery -A app.tasks.celery_app worker
+          --loglevel=info
+          --pool=solo
+          --concurrency=1
+    environment:
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env
+
+  # ── Celery Flower — Task Monitor (dev only) ──────────────────────────────────
+  # Access the real-time task dashboard at http://localhost:5555
+  flower:
+    image: mher/flower:2.0
+    command: celery flower --broker=redis://redis:6379/0 --port=5555
+    ports:
+      - "5555:5555"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    restart: on-failure
