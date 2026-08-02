@@ -12,9 +12,9 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
 
-    OPENAI_API_KEY: Optional[str] = None
-    OPENAI_API_BASE: str = "https://api.openai.com/v1"
-    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_API_KEY: Optional[str] = "ollama"
+    OPENAI_API_BASE: str = "http://host.docker.internal:11434/v1"
+    OPENAI_MODEL: str = "llama3.2:1b"
 
     EMBEDDING_MODEL_PATH: str = "/app/.model_cache/pritamdeka-S-PubMedBert-MS-MARCO"
     # Local path for cross-encoder reranker. Set to None to disable reranking (graceful degradation).

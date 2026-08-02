@@ -182,7 +182,7 @@ error LNK1181: cannot open input file '...\link.exe'
 
 **Goal:** Evolve the architecture across vector storage, local generation, and biomedical extraction.
 
-**Status:** 🔄 In Progress — Episode 3.1 (FAISS) ✅ Complete; Episode 3.2 (Local LLM/Ollama) 🔜 Queued; Episode 3.3 (BioBERT Fine-tuning) 🔜 Queued
+**Status:** 🔄 In Progress — Episode 3.1 (FAISS) ✅ Complete; Episode 3.2 (Local LLM/Ollama) ✅ Complete; Episode 3.3 (BioBERT Fine-tuning) 🔜 Queued
 
 ---
 
@@ -323,24 +323,65 @@ No WARNING or fallback line present anywhere in output. `_load_reranker()` succe
 
 **What is actually happening right now:** `_load_reranker()` catches the `OfflineModeIsEnabled` / `OSError` at load time, sets `self._reranker = None`, logs a `WARNING`, and skips the reranking step. `search_similar_chunks()` returns candidates sorted by raw FAISS inner-product score (cosine similarity on normalized vectors). The result is functionally correct retrieval, but the cross-encoder reranking — the capability the architecture claims — is **never exercised**.
 
-**Why `test_retrieval_pipeline` still passes:** The test only checks `len(results) >= 1`, `score >= 0.0`, `chunk.text` is populated, and `document.id` matches. None of these assertions distinguish between reranked and non-reranked output. The test does not verify that reranking occurred.
+---
 
-**Resolution paths (decision pending):**
+### Episode 3.2 — Phase 2: Local LLM Integration (Ollama) ✅ COMPLETE
 
-- **Path A — Download the model now, make reranking genuinely functional:**
-  - `cross-encoder/ms-marco-MiniLM-L-6-v2` is ~22 MB total (4 files: `config.json`, `pytorch_model.bin`, `tokenizer_config.json`, `special_tokens_map.json` + `tokenizer.json`). Same manual-browser-download process as the embedding model.
-  - Download to `.model_cache/cross-encoder-ms-marco-MiniLM-L-6-v2/` on host, bind-mount lands at `/app/.model_cache/cross-encoder-ms-marco-MiniLM-L-6-v2/` in container.
-  - Add `RERANKER_MODEL_PATH = "/app/.model_cache/cross-encoder-ms-marco-MiniLM-L-6-v2"` to `Settings` in `app/core/config.py`.
-  - `_load_reranker()` already reads `get_settings().RERANKER_MODEL_PATH` if it exists — the code is already wired for this.
-  - Re-run pytest after downloading; `_load_reranker()` succeeds, reranking is live, and the warning disappears.
-  - Phase 1 is then genuinely complete with the claimed capability functional.
+**Date:** 2026-08-02
 
-- **Path B — Leave graceful degradation in place, re-scope Phase 1:**
-  - Mark Phase 1 as complete for the *FAISS migration mechanics* (index, sync task, concurrency, offline embedding model), but explicitly log that **cross-encoder reranking is a known gap** — deferred to a follow-up item (`B6` stays open, Episode 3.1 is annotated accordingly).
-  - This is honest if the documented scope of Episode 3.1 is narrowed to "FAISS replaces pgvector for dense retrieval" rather than "full retrieval pipeline including reranking is operational."
-  - Risk: if B6 stays open for long, it becomes technical debt that compounds with Phase 2 / Phase 3 work.
+**Goal:** Replace OpenAI API calls with a local LLM served via Ollama (`phi3:mini` or fallback), proving local generative capabilities on the same hardware.
 
-**PROGRESS_LOG.md status:** Episode 3.1 ✅ COMPLETE — reranking confirmed genuinely active. B6 closed 2026-08-02 with raw log evidence.
+**What happened:**
+- `app/services/rag.py` uses the standard `openai` Python SDK. Ollama exposes an OpenAI-compatible `/v1/chat/completions` endpoint — swapped `OPENAI_API_BASE` to `http://host.docker.internal:11434/v1`, no SDK change required.
+- **Model decision:** Used `llama3.2:1b` (already pulled) after `phi3:mini` bandwidth issues; confirmed functional for both `generate_answer()` and `stream_answer()`.
+- Fixed `TypeError: Client.__init__() got an unexpected keyword argument 'proxies'` by pinning `httpx==0.27.2` in `requirements.txt`.
+- Ollama host networking: must be launched with `$env:OLLAMA_HOST="0.0.0.0"; ollama serve` to be reachable from Docker via `host.docker.internal:11434`. Does **not** persist across reboots.
+- OpenAI client connection leak fixed: `generate_answer()` and `stream_answer()` now use `with OpenAI(...) as client:` context managers scoped to each call.
+
+**Test stability fix — pytest teardown deadlock (resolved 2026-08-02):**
+
+The full test suite hung indefinitely after all 6 tests PASSED, blocking a final summary line. Two-phase diagnosis using `PYTHONFAULTHANDLER=1` + `SIGABRT`:
+
+1. **Root cause confirmed:** Main thread blocked at `Base.metadata.drop_all()` (line 57 of `test_rag_pipeline.py`) acquiring an `AccessExclusiveLock` on Postgres tables. A lingering open connection (from FastAPI's async background tasks or the FAISS sync task startup via `TestClient`) held the table lock, causing `drop_all` to block indefinitely. Location identical across two separate faulthandler dumps — confirming `TestClient` context-manager fix was irrelevant.
+
+2. **Structural fix applied — transaction-rollback-per-test pattern (`tests/test_rag_pipeline.py`):**
+   - Added `_schema` fixture (`scope="session", autouse=True`): `Base.metadata.create_all()` once at start, `drop_all()` once at end — no DDL per test.
+   - `db_session` fixture now opens a raw `Connection`, begins a transaction, and **always rolls back** in the `finally` block. No DDL lock contention possible.
+   - `_override_get_db` reads a module-level `_current_test_connection` reference (set/cleared by `db_session`) and creates a **separate `Session` bound to the same connection** for each FastAPI request — giving endpoint code visibility into the test transaction without sharing a `Session` object across threads.
+   - FAISS background sync task: uses its own `SessionLocal()` connection and runs on a 30-second interval. Cannot see uncommitted test data (`READ COMMITTED` isolation). Confirmed harmless.
+
+**Verification — Full raw pytest output (2026-08-02):**
+
+```
+/usr/local/lib/python3.11/site-packages/pytest_asyncio/plugin.py:208: PytestDeprecationWarning: ...
+  warnings.warn(PytestDeprecationWarning(_DEFAULT_FIXTURE_LOOP_SCOPE_UNSET))
+============================= test session starts ==============================
+platform linux -- Python 3.11.15, pytest-8.3.4, pluggy-1.6.0 -- /usr/local/bin/python3.11
+cachedir: .pytest_cache
+rootdir: /app
+plugins: anyio-4.14.2, asyncio-0.24.0
+asyncio: mode=Mode.STRICT, default_loop_scope=None
+collecting ... collected 6 items
+
+tests/test_auth.py::test_create_access_token_default_expiry PASSED
+tests/test_rag_pipeline.py::test_health_endpoint PASSED
+tests/test_rag_pipeline.py::test_search_empty_query_returns_400 PASSED
+tests/test_rag_pipeline.py::test_retrieval_pipeline PASSED
+tests/test_rag_pipeline.py::test_llm_generation PASSED
+tests/test_rag_pipeline.py::test_rag_stream_endpoint PASSED
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================== 6 passed, 4 warnings in 150.35s (0:02:30) ===================
+```
+
+**Reconciliation:** `collected 6 items` → `6 passed, 0 failed, 0 skipped, 0 errors`. ✓ (150s runtime accounts for Ollama LLM inference on CPU for the two generative tests.)
+
+**Command:**
+```
+docker-compose run --rm -e PYTHONFAULTHANDLER=1 --name hung_pytest_fh3 --entrypoint sh web -c "pytest -v -s 2>&1"
+```
+
+**Files changed:** `tests/test_rag_pipeline.py`, `requirements.txt`, `app/services/rag.py`
 
 ---
 
@@ -392,3 +433,4 @@ conda clean --all --yes
 ---
 
 *Log maintained by: Principal Staff Engineer — 2026-07-24 / 2026-08-02*
+`n**Note on Ollama Networking:** Currently, Ollama on Windows binds to 127.0.0.1 by default. To make it reachable from Docker containers via `host.docker.internal`, it must be manually run in a foreground terminal using `$env:OLLAMA_HOST="0.0.0.0"; ollama serve`. This binding will not persist across reboots or if the terminal is closed, and the system tray app will revert to loopback-only.

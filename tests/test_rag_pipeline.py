@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Generator
+from typing import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
@@ -30,7 +30,10 @@ OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 _PLACEHOLDER_KEYS = {"test-key", "sk-replace-me", None}
 
 def _has_real_openai_key() -> bool:
-    """Return True only when OPENAI_API_KEY is set to a non-placeholder value."""
+    """Return True if OPENAI_API_KEY is real, or if pointing to local Ollama."""
+    if "host.docker.internal" in settings.OPENAI_API_BASE or "localhost" in settings.OPENAI_API_BASE:
+        return True
+    
     if OPENAI_KEY is None:
         return False
     # Treat obvious placeholder / CI stubs as absent
@@ -38,20 +41,76 @@ def _has_real_openai_key() -> bool:
         return False
     return True
 
-engine = create_engine(settings.DATABASE_URL)
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
-@pytest.fixture(scope="function")
-def db_session() -> Generator[Session, None, None]:
+# ── Session-scoped schema: create tables once, drop once at the very end ──────
+@pytest.fixture(scope="session", autouse=True)
+def _schema() -> Iterator[None]:
+    """Create all tables once before the test session starts; drop after all tests finish.
+
+    This replaces the previous per-test drop_all/create_all, which caused a
+    synchronous DDL AccessExclusiveLock contention deadlock during teardown.
+    """
     Base.metadata.create_all(bind=engine)
-    db = TestingSessionLocal()
+    yield
+    Base.metadata.drop_all(bind=engine)
+
+
+# ── Module-level reference to the current test's Connection ──────────────────
+# Pytest runs tests sequentially (single-threaded), so this is never contested.
+_current_test_connection = None
+
+
+# ── FastAPI dependency override: reuse the current test connection ────────────
+def _override_get_db():
+    """FastAPI dependency that returns a Session bound to the current test's
+    Connection (if active), so endpoint code shares the same transaction as
+    the test fixture — without sharing a single Session object across threads.
+
+    Falls back to an independent session for tests that don't use db_session.
+    """
+    if _current_test_connection is not None:
+        db = Session(bind=_current_test_connection)
+        try:
+            yield db
+        finally:
+            db.close()
+    else:
+        # Tests without db_session (e.g. test_search_empty_query_returns_400)
+        db = TestingSessionLocal()
+        try:
+            yield db
+        finally:
+            db.close()
+
+
+app.dependency_overrides[get_db] = _override_get_db
+
+
+# ── Per-test rollback: wrap each test in a transaction, always roll back ──────
+@pytest.fixture(scope="function")
+def db_session() -> Iterator[Session]:
+    """Yield a Session bound to a transaction that is ALWAYS rolled back.
+
+    Each consumer (test code and endpoint dependency) gets its own Session
+    object but they share the same underlying Connection/transaction, so they
+    see each other's writes without any data persisting between tests.
+    No DDL is executed per-test; schema is managed at session scope by _schema.
+    """
+    global _current_test_connection
+    connection = engine.connect()
+    transaction = connection.begin()
+    _current_test_connection = connection
+    db = Session(bind=connection)
     try:
         yield db
     finally:
-        db.rollback()
         db.close()
-        Base.metadata.drop_all(bind=engine)
+        transaction.rollback()
+        connection.close()
+        _current_test_connection = None
 
 
 @pytest.fixture(scope="function")
@@ -101,28 +160,18 @@ def test_document(db_session: Session, test_session: SearchSession) -> Document:
     return doc
 
 
-def _override_get_db():
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-app.dependency_overrides[get_db] = _override_get_db
-client = TestClient(app)
-
-
 def test_health_endpoint(db_session: Session) -> None:
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "ok"
+    with TestClient(app) as client:
+        response = client.get("/health")
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
 
 
 def test_search_empty_query_returns_400() -> None:
-    response = client.post("/api/v1/search", json={"query": "   ", "top_k": 5})
-    assert response.status_code == 400
-    assert response.json()["detail"] == "Query must not be empty."
+    with TestClient(app) as client:
+        response = client.post("/api/v1/search", json={"query": "   ", "top_k": 5})
+        assert response.status_code == 400
+        assert response.json()["detail"] == "Query must not be empty."
 
 
 @pytest.mark.asyncio
@@ -157,8 +206,8 @@ async def test_llm_generation(db_session: Session, test_document: Document) -> N
     embeddings = generate_embeddings(chunks, model_name=settings.EMBEDDING_MODEL_PATH)
     save_embeddings_to_db(db_session, chunks, embeddings)
 
-    engine = RAGEngine()
-    response = await engine.generate_answer(db=db_session, query="What is the role of TP53 in cancer?", top_k=3)
+    rag_engine = RAGEngine()
+    response = await rag_engine.generate_answer(db=db_session, query="What is the role of TP53 in cancer?", top_k=3)
 
     assert response.query == "What is the role of TP53 in cancer?"
     assert response.answer
@@ -178,12 +227,14 @@ def test_rag_stream_endpoint(db_session: Session, test_document: Document) -> No
     embeddings = generate_embeddings(chunks, model_name=settings.EMBEDDING_MODEL_PATH)
     save_embeddings_to_db(db_session, chunks, embeddings)
 
-    response = client.post(
-        "/api/v1/rag/stream",
-        json={"query": "What is the role of TP53 in cancer?", "top_k": 3},
-    )
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    body = response.text
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/rag/stream",
+            json={"query": "What is the role of TP53 in cancer?", "top_k": 3},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = response.text
+
     assert "data:" in body
     assert "TP53" in body or "cancer" in body.lower()

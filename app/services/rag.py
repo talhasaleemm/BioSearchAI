@@ -54,16 +54,6 @@ class RAGEngine:
         if not settings.OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY environment variable is required")
         self.retriever = VectorRetriever()
-        self._client: Optional[OpenAI] = None
-
-    @property
-    def client(self) -> OpenAI:
-        if self._client is None:
-            self._client = OpenAI(
-                api_key=settings.OPENAI_API_KEY,
-                base_url=settings.OPENAI_API_BASE,
-            )
-        return self._client
 
     async def generate_answer(self, db: Session, query: str, top_k: int = 5, temperature: float = 0.2) -> RAGResponse:
         """Run retrieval and generate a grounded answer.
@@ -100,14 +90,15 @@ class RAGEngine:
         context = _build_context(sources)
         user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
 
-        completion = self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-        )
+        with OpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_API_BASE) as client:
+            completion = client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+            )
         answer = completion.choices[0].message.content or ""
 
         return RAGResponse(query=query, answer=answer, sources=sources)
@@ -151,17 +142,18 @@ class RAGEngine:
         context = _build_context(sources)
         user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
 
-        stream = self.client.chat.completions.create(
-            model=settings.OPENAI_MODEL,
-            temperature=temperature,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt},
-            ],
-            stream=True,
-        )
+        with OpenAI(api_key=settings.OPENAI_API_KEY, base_url=settings.OPENAI_API_BASE) as client:
+            stream = client.chat.completions.create(
+                model=settings.OPENAI_MODEL,
+                temperature=temperature,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt},
+                ],
+                stream=True,
+            )
 
-        for chunk in stream:
-            if chunk.choices[0].delta.content:
-                token = chunk.choices[0].delta.content
-                yield f"data: {token}\n\n"
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    token = chunk.choices[0].delta.content
+                    yield f"data: {token}\n\n"

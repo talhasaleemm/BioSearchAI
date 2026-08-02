@@ -27,7 +27,9 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/biosearchai
-      OPENAI_API_KEY: "test-key"
+      OPENAI_API_KEY: "ollama"
+      OPENAI_API_BASE: "http://host.docker.internal:11434/v1"
+      OPENAI_MODEL: "llama3.2:1b"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       HF_HUB_OFFLINE: "1"
@@ -47,7 +49,9 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/biosearchai
-      OPENAI_API_KEY: "test-key"
+      OPENAI_API_KEY: "ollama"
+      OPENAI_API_BASE: "http://host.docker.internal:11434/v1"
+      OPENAI_MODEL: "llama3.2:1b"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       HF_HUB_OFFLINE: "1"
