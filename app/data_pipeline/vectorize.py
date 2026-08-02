@@ -14,13 +14,14 @@ from transformers import AutoTokenizer
 from app.models import SessionLocal
 from app.models.chunk import Chunk
 from app.models.document import Document
+from app.core.config import get_settings
 
 _tokenizer = None
 
 def get_tokenizer():
     global _tokenizer
     if _tokenizer is None:
-        _tokenizer = AutoTokenizer.from_pretrained("pritamdeka/S-PubMedBert-MS-MARCO")
+        _tokenizer = AutoTokenizer.from_pretrained(get_settings().EMBEDDING_MODEL_PATH)
     return _tokenizer
 
 _SENTENCE_END_RE = re.compile(r'(?<=[.!?])\s+')
@@ -165,30 +166,36 @@ def chunk_documents(db: Session, docs: List[Document], chunk_size_tokens: int = 
     return new_chunks
 
 
-def generate_embeddings(chunks: List[Chunk], model_name: str = "pritamdeka/S-PubMedBert-MS-MARCO") -> np.ndarray:
+def generate_embeddings(chunks: List[Chunk], model_name: Optional[str] = None) -> np.ndarray:
     """Generate embeddings for a list of chunks using SentenceTransformer."""
+    model_name = model_name or get_settings().EMBEDDING_MODEL_PATH
     model = SentenceTransformer(model_name)
     texts = [chunk.text for chunk in chunks]
     embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
     return np.array(embeddings, dtype=np.float32)
 
 
-import asyncio
 from app.services.faiss_index import faiss_manager
 
 def save_embeddings_to_db(db: Session, chunks: List[Chunk], embeddings: np.ndarray) -> None:
-    """Persist generated embeddings to the PostgreSQL ARRAY column and FAISS."""
+    """Persist generated embeddings to the PostgreSQL ARRAY column and FAISS.
+
+    Synchronous-safe: uses faiss_manager.add_with_ids_sync() so this function can be called
+    from both sync code (Celery tasks, CLI scripts) and from inside a running asyncio event loop
+    (async tests, FastAPI lifespan handlers) without raising "loop is already running".
+    """
     for chunk, vector in zip(chunks, embeddings):
         chunk.embedding = vector.tolist()
     db.commit()
-    
-    # Also ingest into the local process FAISS singleton (useful if run in the web process directly)
+
+    # Ingest into the local process FAISS singleton using the sync-safe path.
     ids = np.array([chunk.id for chunk in chunks], dtype=np.int64)
-    asyncio.run(faiss_manager.add_with_ids(embeddings, ids))
+    faiss_manager.add_with_ids_sync(embeddings, ids)
 
 
-def run_vectorization(chunk_size_tokens: int = 450, overlap_tokens: int = 50, model_name: str = "pritamdeka/S-PubMedBert-MS-MARCO") -> dict:
+def run_vectorization(chunk_size_tokens: int = 450, overlap_tokens: int = 50, model_name: Optional[str] = None) -> dict:
     """Run the full chunking, embedding, and pgvector persistence pipeline."""
+    model_name = model_name or get_settings().EMBEDDING_MODEL_PATH
     db = SessionLocal()
     try:
         docs = get_unchunked_documents(db)

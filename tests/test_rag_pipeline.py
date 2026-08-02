@@ -27,6 +27,17 @@ pytestmark = pytest.mark.skipif(
 
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 
+_PLACEHOLDER_KEYS = {"test-key", "sk-replace-me", None}
+
+def _has_real_openai_key() -> bool:
+    """Return True only when OPENAI_API_KEY is set to a non-placeholder value."""
+    if OPENAI_KEY is None:
+        return False
+    # Treat obvious placeholder / CI stubs as absent
+    if OPENAI_KEY in _PLACEHOLDER_KEYS or OPENAI_KEY.startswith("sk-replace"):
+        return False
+    return True
+
 engine = create_engine(settings.DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -122,7 +133,7 @@ async def test_retrieval_pipeline(db_session: Session, test_document: Document) 
     chunks = chunk_documents(db_session, [test_document], chunk_size_tokens=100, overlap_tokens=20)
     assert len(chunks) >= 1
 
-    embeddings = generate_embeddings(chunks, model_name="pritamdeka/S-PubMedBert-MS-MARCO")
+    embeddings = generate_embeddings(chunks, model_name=settings.EMBEDDING_MODEL_PATH)
     save_embeddings_to_db(db_session, chunks, embeddings)
 
     retriever = VectorRetriever()
@@ -136,14 +147,14 @@ async def test_retrieval_pipeline(db_session: Session, test_document: Document) 
         assert "TP53" in chunk.text or "tumor" in chunk.text.lower()
 
 
-@pytest.mark.skipif(OPENAI_KEY is None, reason="OPENAI_API_KEY is required for E2E LLM tests")
+@pytest.mark.skipif(not _has_real_openai_key(), reason="Real OPENAI_API_KEY required for E2E LLM tests")
 @pytest.mark.asyncio
 async def test_llm_generation(db_session: Session, test_document: Document) -> None:
     from app.data_pipeline.vectorize import chunk_documents, generate_embeddings, save_embeddings_to_db
     from app.services.rag import RAGEngine
 
     chunks = chunk_documents(db_session, [test_document], chunk_size_tokens=100, overlap_tokens=20)
-    embeddings = generate_embeddings(chunks, model_name="pritamdeka/S-PubMedBert-MS-MARCO")
+    embeddings = generate_embeddings(chunks, model_name=settings.EMBEDDING_MODEL_PATH)
     save_embeddings_to_db(db_session, chunks, embeddings)
 
     engine = RAGEngine()
@@ -159,12 +170,12 @@ async def test_llm_generation(db_session: Session, test_document: Document) -> N
         assert source.document.title == "TP53 in Human Cancers"
 
 
-@pytest.mark.skipif(OPENAI_KEY is None, reason="OPENAI_API_KEY is required for E2E LLM tests")
+@pytest.mark.skipif(not _has_real_openai_key(), reason="Real OPENAI_API_KEY required for E2E LLM tests")
 def test_rag_stream_endpoint(db_session: Session, test_document: Document) -> None:
     from app.data_pipeline.vectorize import chunk_documents, generate_embeddings, save_embeddings_to_db
 
     chunks = chunk_documents(db_session, [test_document], chunk_size_tokens=100, overlap_tokens=20)
-    embeddings = generate_embeddings(chunks, model_name="pritamdeka/S-PubMedBert-MS-MARCO")
+    embeddings = generate_embeddings(chunks, model_name=settings.EMBEDDING_MODEL_PATH)
     save_embeddings_to_db(db_session, chunks, embeddings)
 
     response = client.post(

@@ -30,6 +30,11 @@ services:
       OPENAI_API_KEY: "test-key"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      HF_HUB_OFFLINE: "1"
+      HF_HOME: "/app/.model_cache"
+      TRANSFORMERS_CACHE: "/app/.model_cache"
+    volumes:
+      - ./.model_cache:/app/.model_cache
     ports:
       - "8000:8000"
     depends_on:
@@ -45,6 +50,11 @@ services:
       OPENAI_API_KEY: "test-key"
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      HF_HUB_OFFLINE: "1"
+      HF_HOME: "/app/.model_cache"
+      TRANSFORMERS_CACHE: "/app/.model_cache"
+    volumes:
+      - ./.model_cache:/app/.model_cache
     depends_on:
       db:
         condition: service_healthy

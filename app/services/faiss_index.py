@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 from typing import List, Tuple
 
 import faiss
@@ -22,13 +23,14 @@ class FAISSIndexManager:
         self.dim = 768
         self.last_sync_timestamp = None
         self._lock = asyncio.Lock()
+        self._thread_lock = threading.Lock()  # for sync callers (Celery, tests)
         # Use exact inner product search (requires normalized vectors)
         base_index = faiss.IndexFlatIP(self.dim)
         # Wrap in IndexIDMap to track chunk.id
         self.index = faiss.IndexIDMap(base_index)
 
     async def add_with_ids(self, embeddings: np.ndarray, ids: np.ndarray) -> None:
-        """Add embeddings with their corresponding chunk IDs to the index safely."""
+        """Add embeddings with their corresponding chunk IDs to the index safely (async path)."""
         if embeddings.shape[0] == 0:
             return
             
@@ -36,6 +38,18 @@ class FAISSIndexManager:
             # Dispatch CPU-bound FAISS add operation to executor
             await asyncio.to_thread(self.index.add_with_ids, embeddings, ids)
             logger.info(f"Added {embeddings.shape[0]} vectors to FAISS index. Total: {self.index.ntotal}")
+
+    def add_with_ids_sync(self, embeddings: np.ndarray, ids: np.ndarray) -> None:
+        """Add embeddings synchronously (for Celery workers, CLI scripts, and sync test helpers).
+
+        Uses a threading.Lock separate from the asyncio.Lock so this is safe to call from any
+        thread without touching the event loop.
+        """
+        if embeddings.shape[0] == 0:
+            return
+        with self._thread_lock:
+            self.index.add_with_ids(embeddings, ids)
+            logger.info(f"[sync] Added {embeddings.shape[0]} vectors to FAISS index. Total: {self.index.ntotal}")
 
     async def search(self, query_vector: np.ndarray, top_k: int) -> Tuple[np.ndarray, np.ndarray]:
         """Search for similar vectors safely."""

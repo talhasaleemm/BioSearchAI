@@ -11,3 +11,13 @@ venv/
 dist/
 build/
 node_modules/
+
+# Model weights — large binary files, bind-mounted into container at runtime
+.model_cache/
+
+# Session/scratch artifacts
+pytest_raw.txt
+fetch_tree.py
+check_files.ps1
+download_model.ps1
+download_model.py
