@@ -87,6 +87,13 @@ class RAGEngine:
                 )
             )
 
+        if not sources:
+            return RAGResponse(
+                query=query,
+                answer="No relevant information found in the knowledge base for this query.",
+                sources=sources,
+            )
+
         context = _build_context(sources)
         user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
 
@@ -138,6 +145,10 @@ class RAGEngine:
 
         sources_payload = json.dumps({"type": "sources", "sources": [s.model_dump() for s in sources]})
         yield f"data: {sources_payload}\n\n"
+
+        if not sources:
+            yield "data: No relevant information found in the knowledge base for this query.\n\n"
+            return
 
         context = _build_context(sources)
         user_prompt = f"Context:\n{context}\n\nQuestion: {query}"
