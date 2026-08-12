@@ -6,7 +6,7 @@ alembic upgrade head
 
 if [ "$RUN_AS_WORKER" = "true" ]; then
     echo "Starting Celery worker..."
-    exec celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    exec celery -A app.tasks.celery_app worker --loglevel=info --concurrency=1
 elif [ $# -eq 0 ]; then
     echo "Starting Uvicorn..."
     exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
