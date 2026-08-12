@@ -1862,28 +1862,11 @@ conda clean --all --yes
 - Ran end-to-end API test proving the registration, login, session creation, and ingestion handoff to the Celery broker works correctly.
 - *Note:* Documents currently remain in a "pending" status because the Celery worker process is intentionally not booted on Railway yet (see Known Limitations).
 
-### Known Limitations of Current Railway Deployment ⚠️
-
-1. **Redis / Celery Worker Not Running:** Railway currently runs **web-only** (single Uvicorn process). The Celery worker — which handles background document ingestion, FAISS index updates, and async tasks — is **not started**. Redis is provisioned but not actively connected by the web process. **Document ingestion will not work** on this deployment until a separate worker service is added to Railway (or the entrypoint is updated to run both web + worker).
-
-2. **NER Model Absent:** The custom fine-tuned BioBERT NER model (`biobert-ner-bc5cdr`) is not available on Railway because it was trained locally/on Kaggle and never uploaded to HuggingFace Hub. NER entity extraction returns empty results. To fix: either upload the model to HF Hub, or copy the checkpoint into the Railway persistent volume via `railway volume`.
-
-3. **Empty FAISS Index:** No documents have been ingested into the Railway deployment. Search returns `results_count: 0` until documents are uploaded and processed (which requires the Celery worker — see limitation #1).
-
-**Files changed:**
-- `app/core/config.py` â€” Added `_resolve_path()`, `resolved_*` properties
-- `app/services/retrieval.py` â€” Use `resolved_embedding_model`, `resolved_reranker_model`
-- `app/services/ner.py` â€” Conditional `local_files_only`, use `resolved_ner_model`
-- `frontend/src/app/page.tsx` â€” Redirect to `/login`
-- `.vercelignore` â€” Exclude large backend dirs from Vercel uploads
-- `.dockerignore` / `.railwayignore` â€” `/models` instead of `models`
-- `entrypoint.sh` â€” `${PORT:-8000}` instead of hardcoded `8000`
-- `alembic/env.py` â€” Dynamic DB URL, correct import
-
-
-## ?? Known Limitations
+## ⚠️ Known Limitations
 
 - **Cross-encoder Reranker on Railway**: The reranker is intentionally disabled on the Railway deployment specifically due to the hard 500MB volume constraint on Railway Hobby tier. The base embedding model requires ~474MB, leaving insufficient space for the ~90MB reranker. The local Docker-compose deployment still has full reranker capability; this is a Railway-only tradeoff, not a project-wide regression.
 
 - **Celery/Redis on Railway**: The 500 `kombu.exceptions.OperationalError: Authentication required` error during document ingestion was successfully resolved. The root cause was not a Kombu/Railway incompatibility, but rather that the application reads `CELERY_BROKER_URL` (not `REDIS_URL`). Once the correct environment variable was set, the broker connection succeeded and the API returned a `202 Accepted`. However, document processing will remain in a "pending" state because the Railway deployment currently only runs the web process (Uvicorn), and the Celery worker process is not started.
 
+
+- **NER Model on Railway**: The custom fine-tuned BioBERT NER model has no public HuggingFace Hub ID (trained locally/on Kaggle) and is not available on this deployment. NER entity extraction returns empty results on Railway. Local Docker-compose deployment is unaffected.
