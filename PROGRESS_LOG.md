@@ -1847,16 +1847,28 @@ conda clean --all --yes
 - Set `CORS_ALLOWED_ORIGINS` on Railway to include `https://bio-search-ai.vercel.app`.
 - Created `.vercelignore` to exclude `.model_cache/`, `models/`, `training/`, `venv/` from Vercel uploads (was hitting 100 MB file size limit and 1.6 GB total upload).
 - Set **Root Directory** to `frontend` in Vercel dashboard settings.
-- Deployed via `vercel --prod` â€” build succeeded, all routes (`/`, `/login`, `/dashboard`, `/search`) compiled.
-- **Result:** `https://bio-search-ai.vercel.app` returns `307 Redirect â†’ /login`.
+- Deployed via `vercel --prod` — build succeeded, all routes (`/`, `/login`, `/dashboard`, `/search`) compiled.
+- **Result:** `https://bio-search-ai.vercel.app` returns `307 Redirect → /login`.
 
-### Known Limitations of Current Railway Deployment âš ï¸�
+### Episode 5.4 — Broker Auth & Deployment Bug Fixes ✅ COMPLETE
 
-1. **Redis / Celery Worker Not Running:** Railway currently runs **web-only** (single Uvicorn process). The Celery worker â€” which handles background document ingestion, FAISS index updates, and async tasks â€” is **not started**. Redis is provisioned but not actively connected by the web process. **Document ingestion will not work** on this deployment until a separate worker service is added to Railway (or the entrypoint is updated to run both web + worker).
+**Date:** 2026-08-12
+
+**What happened:**
+- Diagnosed the underlying cause of the `kombu.exceptions.OperationalError: Authentication required` error during Railway ingestion. Discovered `app/tasks/celery_app.py` reads `CELERY_BROKER_URL` rather than the commonly used `REDIS_URL`. Set `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` on Railway to match the Redis connection string, completely resolving the 500 error (returns 202 Accepted).
+- Discovered a silent Railway deployment failure (returning 502 Bad Gateway) caused by `alembic` throwing a `ModuleNotFoundError: No module named 'app.models'`.
+- Root cause: A recent update to `.gitignore` added `models/` (without a leading slash), which inadvertently matched and excluded `app/models/` during the Railway deployment process (similar to a previous `.dockerignore` issue). Fixed by anchoring it as `/models/` in `.gitignore`.
+- Verified the build context using a clean `alpine` docker build, confirming that `app/models/` is now successfully copied to the container.
+- Ran end-to-end API test proving the registration, login, session creation, and ingestion handoff to the Celery broker works correctly.
+- *Note:* Documents currently remain in a "pending" status because the Celery worker process is intentionally not booted on Railway yet (see Known Limitations).
+
+### Known Limitations of Current Railway Deployment ⚠️
+
+1. **Redis / Celery Worker Not Running:** Railway currently runs **web-only** (single Uvicorn process). The Celery worker — which handles background document ingestion, FAISS index updates, and async tasks — is **not started**. Redis is provisioned but not actively connected by the web process. **Document ingestion will not work** on this deployment until a separate worker service is added to Railway (or the entrypoint is updated to run both web + worker).
 
 2. **NER Model Absent:** The custom fine-tuned BioBERT NER model (`biobert-ner-bc5cdr`) is not available on Railway because it was trained locally/on Kaggle and never uploaded to HuggingFace Hub. NER entity extraction returns empty results. To fix: either upload the model to HF Hub, or copy the checkpoint into the Railway persistent volume via `railway volume`.
 
-3. **Empty FAISS Index:** No documents have been ingested into the Railway deployment. Search returns `results_count: 0` until documents are uploaded and processed (which requires the Celery worker â€” see limitation #1).
+3. **Empty FAISS Index:** No documents have been ingested into the Railway deployment. Search returns `results_count: 0` until documents are uploaded and processed (which requires the Celery worker — see limitation #1).
 
 **Files changed:**
 - `app/core/config.py` â€” Added `_resolve_path()`, `resolved_*` properties
