@@ -31,7 +31,7 @@ class VectorRetriever:
     RERANKER_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
     def __init__(self, model_name: Optional[str] = None) -> None:
-        self.model_name = model_name or get_settings().EMBEDDING_MODEL_PATH
+        self.model_name = model_name or get_settings().resolved_embedding_model
         self._model: Optional[SentenceTransformer] = None
         # _reranker is None until first use; stays None permanently if load fails.
         self._reranker_loaded: bool = False
@@ -48,8 +48,13 @@ class VectorRetriever:
         if self._reranker_loaded:
             return
         self._reranker_loaded = True
-        reranker_path = getattr(get_settings(), "RERANKER_MODEL_PATH", None)
-        model_id = reranker_path or self.RERANKER_MODEL
+
+        if not get_settings().ENABLE_RERANKER:
+            logger.info("Cross-encoder reranking is disabled via configuration (ENABLE_RERANKER=False).")
+            self._reranker = None
+            return
+
+        model_id = get_settings().resolved_reranker_model or self.RERANKER_MODEL
         try:
             from sentence_transformers import CrossEncoder  # local import to avoid startup cost
             self._reranker = CrossEncoder(model_id)
