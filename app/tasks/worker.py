@@ -80,15 +80,26 @@ def process_document_task(self, document_id: int) -> dict:
             # is in a PendingRollback state and db.commit() would raise a secondary
             # exception masking the original.
             db.rollback()
-            if document is not None:
-                document.status = "error"
-                db.commit()
         except Exception:
             pass  # best-effort cleanup — do not let secondary exception mask original
+            
         # Retry up to max_retries times with exponential-ish back-off.
         # acks_late ensures the message is not acknowledged until this function
         # returns cleanly, so a crash before raise will redeliver — but the
         # idempotency guard above prevents chunk duplication on redelivery.
-        raise self.retry(exc=exc)
+        from celery.exceptions import MaxRetriesExceededError
+        try:
+            raise self.retry(exc=exc)
+        except MaxRetriesExceededError:
+            try:
+                if document is not None:
+                    # Refresh document from db to avoid stale state
+                    document = db.get(Document, document_id)
+                    if document:
+                        document.status = "error"
+                        db.commit()
+            except Exception:
+                pass
+            raise
     finally:
         db.close()

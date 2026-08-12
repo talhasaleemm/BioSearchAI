@@ -171,7 +171,7 @@ def generate_embeddings(chunks: List[Chunk], model_name: Optional[str] = None) -
     model_name = model_name or get_settings().resolved_embedding_model
     model = SentenceTransformer(model_name)
     texts = [chunk.text for chunk in chunks]
-    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
+    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True, batch_size=4)
     return np.array(embeddings, dtype=np.float32)
 
 
