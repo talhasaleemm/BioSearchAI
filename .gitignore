@@ -25,7 +25,7 @@ download_model.py
 .vercel
 .env*
 
-models/
+/models/
 frontend_vite_backup/
 kaggle_debug_*/
 *.log
