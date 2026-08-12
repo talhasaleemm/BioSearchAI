@@ -120,6 +120,15 @@ class VectorRetriever:
                 (chunk, document, float(rerank_score))
                 for (chunk, document, _), rerank_score in zip(candidates, rerank_scores)
             ]
+            # Logits threshold: usually > 0 is good, but we can use -2.0 to be safe and exclude absolute garbage
+            MIN_SCORE_THRESHOLD = -2.0
+        else:
+            # Cosine similarity threshold for FAISS raw scores (normalized embeddings)
+            # Must be high enough to filter out completely unrelated text like BRCA1 (0.84+)
+            MIN_SCORE_THRESHOLD = 0.88
 
+        # Filter and sort
+        candidates = [item for item in candidates if item[2] >= MIN_SCORE_THRESHOLD]
         candidates.sort(key=lambda item: item[2], reverse=True)
+        
         return candidates[:top_k]
