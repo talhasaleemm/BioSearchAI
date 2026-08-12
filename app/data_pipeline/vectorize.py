@@ -165,13 +165,16 @@ def chunk_documents(db: Session, docs: List[Document], chunk_size_tokens: int = 
         db.refresh(chunk)
     return new_chunks
 
+_embedding_model = None
 
 def generate_embeddings(chunks: List[Chunk], model_name: Optional[str] = None) -> np.ndarray:
     """Generate embeddings for a list of chunks using SentenceTransformer."""
+    global _embedding_model
     model_name = model_name or get_settings().resolved_embedding_model
-    model = SentenceTransformer(model_name)
+    if _embedding_model is None:
+        _embedding_model = SentenceTransformer(model_name)
     texts = [chunk.text for chunk in chunks]
-    embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True, batch_size=4)
+    embeddings = _embedding_model.encode(texts, show_progress_bar=False, normalize_embeddings=True, batch_size=4)
     return np.array(embeddings, dtype=np.float32)
 
 
