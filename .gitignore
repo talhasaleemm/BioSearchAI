@@ -21,3 +21,14 @@ fetch_tree.py
 check_files.ps1
 download_model.ps1
 download_model.py
+
+.vercel
+.env*
+
+models/
+frontend_vite_backup/
+kaggle_debug_*/
+*.log
+test_py_out/
+artifacts/
+training/

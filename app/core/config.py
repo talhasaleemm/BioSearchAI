@@ -23,7 +23,16 @@ def _resolve_path(local_path: Optional[str], hub_fallback: Optional[str]) -> Opt
     """
     if local_path and os.path.isdir(local_path):
         return local_path
+        
+    # Local Windows fallback: if running tests outside Docker, `/app/.model_cache` 
+    # won't exist. Strip `/app/` to check relative to CWD.
+    if local_path and local_path.startswith("/app/"):
+        rel_path = local_path[5:]
+        if os.path.isdir(rel_path):
+            return rel_path
+            
     return hub_fallback
+
 
 
 class Settings(BaseSettings):

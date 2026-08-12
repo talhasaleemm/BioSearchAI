@@ -18,6 +18,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY alembic.ini alembic.ini
 COPY alembic alembic
 COPY app app
+COPY entrypoint.sh .
+
+# Fix Windows CRLF line endings for entrypoint script
+RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
 
 EXPOSE 8000
 

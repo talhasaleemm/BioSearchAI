@@ -13,15 +13,21 @@ async def periodic_faiss_sync(interval_seconds: int = 30):
     """Background task to poll for new chunks and add them to FAISS."""
     last_sync_id = 0
     
-    while True:
-        try:
-            db = SessionLocal()
+    try:
+        while True:
+            def _fetch_new_chunks():
+                db = SessionLocal()
+                try:
+                    new_chunks = db.query(Chunk).filter(
+                        Chunk.id > last_sync_id,
+                        Chunk.embedding.is_not(None)
+                    ).order_by(Chunk.id.asc()).all()
+                    return new_chunks
+                finally:
+                    db.close()
+                    
             try:
-                # Fetch new chunks that have embeddings
-                new_chunks = db.query(Chunk).filter(
-                    Chunk.id > last_sync_id,
-                    Chunk.embedding.is_not(None)
-                ).order_by(Chunk.id.asc()).all()
+                new_chunks = await asyncio.to_thread(_fetch_new_chunks)
                 
                 if new_chunks:
                     embeddings = np.array([chunk.embedding for chunk in new_chunks], dtype=np.float32)
@@ -31,11 +37,9 @@ async def periodic_faiss_sync(interval_seconds: int = 30):
                     
                     last_sync_id = new_chunks[-1].id
                     logger.info(f"FAISS sync complete. Synced up to chunk ID {last_sync_id}")
-            finally:
-                db.close()
-        except asyncio.CancelledError:
-            break
-        except Exception as e:
-            logger.error(f"Error in FAISS sync task: {e}")
-            
-        await asyncio.sleep(interval_seconds)
+            except Exception as e:
+                logger.error(f"Error in FAISS sync task: {e}")
+                
+            await asyncio.sleep(interval_seconds)
+    except asyncio.CancelledError:
+        logger.info("FAISS background sync cancelled cleanly.")

@@ -22,8 +22,7 @@ class FAISSIndexManager:
     def _init_index(self):
         self.dim = 768
         self.last_sync_timestamp = None
-        self._lock = asyncio.Lock()
-        self._thread_lock = threading.Lock()  # for sync callers (Celery, tests)
+        self._rlock = threading.RLock()
         # Use exact inner product search (requires normalized vectors)
         base_index = faiss.IndexFlatIP(self.dim)
         # Wrap in IndexIDMap to track chunk.id
@@ -34,20 +33,19 @@ class FAISSIndexManager:
         if embeddings.shape[0] == 0:
             return
             
-        async with self._lock:
-            # Dispatch CPU-bound FAISS add operation to executor
-            await asyncio.to_thread(self.index.add_with_ids, embeddings, ids)
-            logger.info(f"Added {embeddings.shape[0]} vectors to FAISS index. Total: {self.index.ntotal}")
+        def _add():
+            with self._rlock:
+                self.index.add_with_ids(embeddings, ids)
+                
+        # Dispatch both lock acquisition and CPU-bound FAISS add to the same thread
+        await asyncio.to_thread(_add)
+        logger.info(f"Added {embeddings.shape[0]} vectors to FAISS index. Total: {self.index.ntotal}")
 
     def add_with_ids_sync(self, embeddings: np.ndarray, ids: np.ndarray) -> None:
-        """Add embeddings synchronously (for Celery workers, CLI scripts, and sync test helpers).
-
-        Uses a threading.Lock separate from the asyncio.Lock so this is safe to call from any
-        thread without touching the event loop.
-        """
+        """Add embeddings synchronously (for Celery workers, CLI scripts, and sync test helpers)."""
         if embeddings.shape[0] == 0:
             return
-        with self._thread_lock:
+        with self._rlock:
             self.index.add_with_ids(embeddings, ids)
             logger.info(f"[sync] Added {embeddings.shape[0]} vectors to FAISS index. Total: {self.index.ntotal}")
 
@@ -56,11 +54,12 @@ class FAISSIndexManager:
         if self.index.ntotal == 0:
             return np.array([[]]), np.array([[]])
             
-        async with self._lock:
-            # Dispatch CPU-bound FAISS search operation to executor
-            distances, indices = await asyncio.to_thread(
-                self.index.search, np.array([query_vector], dtype=np.float32), top_k
-            )
-            return distances, indices
+        def _search():
+            with self._rlock:
+                return self.index.search(np.array([query_vector], dtype=np.float32), top_k)
+                
+        # Dispatch both lock acquisition and CPU-bound FAISS search to the same thread
+        distances, indices = await asyncio.to_thread(_search)
+        return distances, indices
 
 faiss_manager = FAISSIndexManager()

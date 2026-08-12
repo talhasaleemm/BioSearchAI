@@ -21,7 +21,7 @@ _tokenizer = None
 def get_tokenizer():
     global _tokenizer
     if _tokenizer is None:
-        _tokenizer = AutoTokenizer.from_pretrained(get_settings().EMBEDDING_MODEL_PATH)
+        _tokenizer = AutoTokenizer.from_pretrained(get_settings().resolved_embedding_model)
     return _tokenizer
 
 _SENTENCE_END_RE = re.compile(r'(?<=[.!?])\s+')
@@ -168,7 +168,7 @@ def chunk_documents(db: Session, docs: List[Document], chunk_size_tokens: int = 
 
 def generate_embeddings(chunks: List[Chunk], model_name: Optional[str] = None) -> np.ndarray:
     """Generate embeddings for a list of chunks using SentenceTransformer."""
-    model_name = model_name or get_settings().EMBEDDING_MODEL_PATH
+    model_name = model_name or get_settings().resolved_embedding_model
     model = SentenceTransformer(model_name)
     texts = [chunk.text for chunk in chunks]
     embeddings = model.encode(texts, show_progress_bar=False, normalize_embeddings=True)
@@ -195,7 +195,7 @@ def save_embeddings_to_db(db: Session, chunks: List[Chunk], embeddings: np.ndarr
 
 def run_vectorization(chunk_size_tokens: int = 450, overlap_tokens: int = 50, model_name: Optional[str] = None) -> dict:
     """Run the full chunking, embedding, and pgvector persistence pipeline."""
-    model_name = model_name or get_settings().EMBEDDING_MODEL_PATH
+    model_name = model_name or get_settings().resolved_embedding_model
     db = SessionLocal()
     try:
         docs = get_unchunked_documents(db)

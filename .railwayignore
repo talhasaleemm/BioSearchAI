@@ -1,0 +1,6 @@
+.model_cache
+frontend
+node_modules
+.next
+.git
+/models

@@ -13,6 +13,7 @@ app = Celery(
     "biosearchai",
     broker=CELERY_BROKER_URL,
     backend=CELERY_RESULT_BACKEND,
+    include=["app.tasks.worker"],
 )
 
 app.conf.update(

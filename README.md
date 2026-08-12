@@ -29,10 +29,32 @@ To prevent silent data loss during BERT tokenization (512-token limit), the inge
 ### 3. Asynchronous Event-Driven Ingestion
 To prevent LLM inference and embedding generation from blocking the main Uvicorn HTTP worker threads, document ingestion is decoupled. The `/ingest` API returns an immediate `202 Accepted`, while Celery workers handle heavy Transformer inference, PostgreSQL chunk insertion, and vector indexing in the background.
 
-### 4. 100% Live "Purist" Integration Testing
-No mocked LLMs. No mock database connections. The `pytest` suite spins up the live Dockerized PostgreSQL + `pgvector` container, executes real SQL transactions, builds actual HNSW graphs, and asserts against live network responses to guarantee true end-to-end reliability.
+    # 4. 100% Live "Purist" Integration Testing
+    No mocked LLMs. No mock database connections. The `pytest` suite spins up the live Dockerized PostgreSQL + `pgvector` container, executes real SQL transactions, builds actual HNSW graphs, and asserts against live network responses to guarantee true end-to-end reliability.
 
----
+    ---
+
+    ## ⚠️ Known Limitations & Scope Decisions
+
+    ### 1. API Exception Swallowing at Startup (B3)
+    The FastAPI application currently catches and swallows initial configuration or connectivity exceptions during startup to prevent immediate container death. While acceptable for early development, a production system should explicitly fail fast. The production fix is to remove top-level `try/except` blocks in `main.py` and enforce strict health checks.
+
+    ### 2. Celery Retry and Message Acknowledgement (B4)
+    Celery workers do not currently utilize `acks_late=True` or exponential backoff retries for document ingestion tasks. This is acceptable for current traffic volumes but risks message loss if a worker dies mid-task. The production fix is to enable late acknowledgments and define a robust `@app.task(bind=True, max_retries=3)` retry policy.
+
+    ### 3. FAISS Dual-Lock Race Condition (B7)
+    The current FAISS index implementation uses a mix of `asyncio.Lock` and `threading.Lock`, which is safe only because current operations are sequentially tested. In a highly concurrent environment, this risks race conditions. The production fix is to unify synchronization under a single `threading.RLock` acquired by both async and sync paths.
+
+    ### 4. FAISS Read-Serialization Tradeoff
+    Vector search currently blocks on reading the FAISS index during heavy ingestion, prioritizing data integrity over extreme read concurrency. This tradeoff is acceptable for a single-node setup. A production system would implement a true distributed vector database (e.g., Pinecone, Milvus) or rely solely on pgvector to avoid local file locking.
+
+    ### 5. CORS Configuration (Hardened)
+    Cross-Origin Resource Sharing (CORS) was originally set to a wildcard for early development, but has been hardened to fail-closed. It is currently restricted to local development origins (e.g., `http://localhost:3000`). For production, this should be updated to point to the actual frontend deployment domains.
+
+    ### 6. Test Database Isolation (B8)
+    The automated E2E test suite currently runs against the primary development PostgreSQL database rather than a dedicated, ephemeral test schema. This shared state can cause exact-match assertions to fail if manual dev data contaminates the retrieval pool. To maintain project scope, we accepted this tradeoff by relaxing retrieval assertions (checking for at least one expected source rather than an exact match array) instead of building complex database container orchestration for tests.
+
+    ---
 
 ## ?? Quickstart (Docker)
 

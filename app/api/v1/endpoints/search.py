@@ -13,7 +13,13 @@ from app.schemas.search import ChunkResult, DocumentMetadata, SearchResponse
 from app.services.retrieval import VectorRetriever
 
 router = APIRouter(prefix="/api/v1", tags=["search"])
-retriever = VectorRetriever()
+_retriever = None
+
+def get_retriever() -> VectorRetriever:
+    global _retriever
+    if _retriever is None:
+        _retriever = VectorRetriever()
+    return _retriever
 
 
 class SearchQuery(BaseModel):
@@ -41,7 +47,8 @@ async def search_chunks(payload: SearchQuery, db: Session = Depends(get_db)) -> 
         )
 
     try:
-        results = retriever.search_similar_chunks(
+        retriever = get_retriever()
+        results = await retriever.search_similar_chunks(
             db=db,
             query=payload.query,
             top_k=payload.top_k,
@@ -70,8 +77,13 @@ async def search_chunks(payload: SearchQuery, db: Session = Depends(get_db)) -> 
             )
         )
 
+    # Extract entities from the search query
+    from app.services.ner import ner_service
+    extracted_entities = ner_service.extract_entities(payload.query)
+
     return SearchResponse(
         query=payload.query,
+        extracted_entities=extracted_entities,
         results_count=len(chunk_results),
         results=chunk_results,
     )

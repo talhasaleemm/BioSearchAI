@@ -1,0 +1,8 @@
+.model_cache/
+.model_cache
+models/
+.venv/
+venv/
+training/
+__pycache__/
+*.sqlite3

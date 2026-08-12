@@ -20,6 +20,10 @@ if config.config_file_name is not None:
 # Ensure project root is on sys.path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from app.core.config import get_settings
+settings = get_settings()
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.models import Base  # noqa: E402

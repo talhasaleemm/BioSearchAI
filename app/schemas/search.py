@@ -31,5 +31,6 @@ class SearchResponse(BaseModel):
     """Validated search response payload."""
 
     query: str
+    extracted_entities: Optional[List[dict]] = None
     results_count: int
     results: List[ChunkResult]

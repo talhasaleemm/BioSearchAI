@@ -16,3 +16,7 @@ build
 .vscode
 .DS_Store
 Thumbs.db
+.model_cache
+frontend
+.next
+/models

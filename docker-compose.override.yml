@@ -43,6 +43,7 @@ services:
       OPENAI_API_KEY: "${OPENAI_API_KEY:-sk-replace-me}"
       # Tells Uvicorn and any Python logging to output colours
       PYTHONUNBUFFERED: "1"
+      HF_HUB_OFFLINE: "1"
     env_file:
       - .env
 
@@ -67,6 +68,7 @@ services:
           --concurrency=1
     environment:
       PYTHONUNBUFFERED: "1"
+      HF_HUB_OFFLINE: "1"
     env_file:
       - .env
 
