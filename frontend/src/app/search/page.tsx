@@ -67,17 +67,21 @@ export default function SearchPage() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder('utf-8');
       let done = false;
+      let buffer = '';
 
       while (!done) {
         const { value, done: readerDone } = await reader.read();
         done = readerDone;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          console.log(`Received chunk: ${chunk.length} chars (e.g. ${chunk.substring(0, 20).replace(/\n/g, '\\n')})`);
-          // SSE events are separated by double newlines, each line starting with 'data: '
-          const events = chunk.split('\n\n');
+          buffer += chunk;
           
-          for (const event of events) {
+          // SSE events are separated by double newlines
+          let boundaryIdx;
+          while ((boundaryIdx = buffer.indexOf('\n\n')) >= 0) {
+            const event = buffer.substring(0, boundaryIdx);
+            buffer = buffer.substring(boundaryIdx + 2);
+            
             if (event.startsWith('data: ')) {
               const dataStr = event.substring(6);
               if (!dataStr) continue;
@@ -88,7 +92,6 @@ export default function SearchPage() {
                 if (parsed.type === 'sources') {
                   setSources(parsed.sources);
                 } else {
-                  // If it's valid JSON but not sources, it might just be the string itself encoded, though backend doesn't json encode the tokens
                   setAnswer((prev) => prev + dataStr);
                 }
               } catch (e) {
@@ -208,3 +211,4 @@ export default function SearchPage() {
     </div>
   );
 }
+
