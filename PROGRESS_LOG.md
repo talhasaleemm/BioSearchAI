@@ -1862,6 +1862,15 @@ conda clean --all --yes
 - Ran end-to-end API test proving the registration, login, session creation, and ingestion handoff to the Celery broker works correctly.
 - *Note:* Documents currently remain in a "pending" status because the Celery worker process is intentionally not booted on Railway yet (see Known Limitations).
 
+### Episode 5.5 — Corrective Note: Missing Frontend Registration Page
+
+**Date:** 2026-08-12
+
+**What happened:**
+- **PROCESS VIOLATION DETECTED:** A critical gap was found where the frontend has NO working `/register` page (returns a 404), completely preventing new user onboarding.
+- This invalidates the completeness claims made in **Episode 4.2 Part 3** ("Dashboard/Search UI verification... COMPLETE") and **Episode 4.4** ("Finalized all technical requirements"), as the Playwright tests used in Episode 4.2 never actually exercised the registration flow through the real UI, relying on pre-existing or API-generated accounts instead.
+- This note serves as a corrective log entry. A working `/register` page is now being implemented, wired to the backend, and will be verified using an actual browser-driven Playwright test to ensure the UI onboarding flow is fully functional.
+
 ## ⚠️ Known Limitations
 
 - **Cross-encoder Reranker on Railway**: The reranker is intentionally disabled on the Railway deployment specifically due to the hard 500MB volume constraint on Railway Hobby tier. The base embedding model requires ~474MB, leaving insufficient space for the ~90MB reranker. The local Docker-compose deployment still has full reranker capability; this is a Railway-only tradeoff, not a project-wide regression.
