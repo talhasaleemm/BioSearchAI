@@ -51,8 +51,7 @@ class RAGEngine:
     """Retrieval-Augmented Generation engine with citation guardrails."""
 
     def __init__(self) -> None:
-        if not settings.OPENAI_API_KEY:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
+        self.has_valid_key = bool(settings.OPENAI_API_KEY and not settings.OPENAI_API_KEY.startswith("sk-please-replace-me"))
         self.retriever = VectorRetriever()
 
     async def generate_answer(self, db: Session, query: str, top_k: int = 5, temperature: float = 0.2) -> RAGResponse:
@@ -91,6 +90,13 @@ class RAGEngine:
             return RAGResponse(
                 query=query,
                 answer="No relevant information found in the knowledge base for this query.",
+                sources=sources,
+            )
+
+        if not self.has_valid_key:
+            return RAGResponse(
+                query=query,
+                answer="Answer generation is currently unavailable in this deployment — showing retrieved sources only.",
                 sources=sources,
             )
 
@@ -148,6 +154,10 @@ class RAGEngine:
 
         if not sources:
             yield "data: No relevant information found in the knowledge base for this query.\n\n"
+            return
+
+        if not self.has_valid_key:
+            yield "data: Answer generation is currently unavailable in this deployment — showing retrieved sources only.\n\n"
             return
 
         context = _build_context(sources)

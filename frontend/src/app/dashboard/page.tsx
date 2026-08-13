@@ -14,6 +14,12 @@ export default function DashboardPage() {
   const [sourceUrl, setSourceUrl] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [pubmedQuery, setPubmedQuery] = useState('');
+  const [pubmedResults, setPubmedResults] = useState<any[]>([]);
+  const [isSearchingPubMed, setIsSearchingPubMed] = useState(false);
+  const [ingestingPmid, setIngestingPmid] = useState<string | null>(null);
+  const [pubmedMessage, setPubmedMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -24,6 +30,47 @@ export default function DashboardPage() {
   if (isLoading || !isAuthenticated) {
     return <div className="min-h-screen flex items-center justify-center bg-[var(--background)] text-white">Loading...</div>;
   }
+
+  
+  const handlePubmedSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pubmedQuery) return;
+    
+    setIsSearchingPubMed(true);
+    setPubmedMessage(null);
+    setPubmedResults([]);
+
+    try {
+      const response = await fetchApi('/api/v1/documents/pubmed-search', {
+        method: 'POST',
+        body: JSON.stringify({ query: pubmedQuery, max_results: 5 }),
+      });
+      setPubmedResults(response.results || []);
+      if (!response.results || response.results.length === 0) {
+        setPubmedMessage({ type: 'success', text: 'No results found.' });
+      }
+    } catch (err: any) {
+      setPubmedMessage({ type: 'error', text: err.message || 'Failed to search PubMed' });
+    } finally {
+      setIsSearchingPubMed(false);
+    }
+  };
+
+  const handlePubmedIngest = async (pmid: string) => {
+    setIngestingPmid(pmid);
+    setPubmedMessage(null);
+    try {
+      const response = await fetchApi('/api/v1/documents/pubmed-ingest', {
+        method: 'POST',
+        body: JSON.stringify({ pmid, session_id: sessionId }),
+      });
+      setPubmedMessage({ type: 'success', text: PubMed abstract queued successfully! (ID: ) });
+    } catch (err: any) {
+      setPubmedMessage({ type: 'error', text: err.message || 'Failed to ingest PubMed abstract' });
+    } finally {
+      setIngestingPmid(null);
+    }
+  };
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +205,58 @@ export default function DashboardPage() {
               Go to Search Interface →
             </button>
           </div>
+        </div>
+
+        {/* PubMed Integration Section */}
+        <div className="mt-8 p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xl shadow-xl">
+          <h2 className="text-xl font-semibold mb-6">Search & Ingest from PubMed</h2>
+          
+          {pubmedMessage && (
+            <div className={mb-6 p-4 rounded-lg border text-sm }>
+              {pubmedMessage.text}
+            </div>
+          )}
+
+          <form onSubmit={handlePubmedSearch} className="flex gap-4 mb-8">
+            <input
+              type="text"
+              value={pubmedQuery}
+              onChange={(e) => setPubmedQuery(e.target.value)}
+              className="flex-1 px-4 py-2.5 rounded-lg bg-black/20 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
+              placeholder="e.g., BRCA1 breast cancer"
+              required
+            />
+            <button
+              type="submit"
+              disabled={isSearchingPubMed || !pubmedQuery}
+              className="px-6 py-2.5 rounded-lg bg-white/10 hover:bg-white/15 text-white font-medium transition-all duration-200 border border-white/5 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+            >
+              {isSearchingPubMed ? 'Searching...' : 'Search PubMed'}
+            </button>
+          </form>
+
+          {pubmedResults.length > 0 && (
+            <div className="space-y-4">
+              {pubmedResults.map((result, idx) => (
+                <div key={result.pmid + idx} className="p-4 rounded-lg bg-black/20 border border-white/5 flex flex-col md:flex-row justify-between gap-4">
+                  <div className="flex-1">
+                    <h3 className="font-medium text-white mb-1">{result.title}</h3>
+                    <div className="text-xs text-slate-400 mb-2">PMID: {result.pmid} | Year: {result.year || 'N/A'}</div>
+                    <p className="text-sm text-slate-300 line-clamp-3">{result.abstract}</p>
+                  </div>
+                  <div className="flex items-start md:items-center">
+                    <button
+                      onClick={() => handlePubmedIngest(result.pmid)}
+                      disabled={ingestingPmid === result.pmid}
+                      className="px-4 py-2 rounded-lg bg-[var(--primary)]/20 text-[var(--primary)] hover:bg-[var(--primary)]/30 font-medium transition-all duration-200 disabled:opacity-50 whitespace-nowrap"
+                    >
+                      {ingestingPmid === result.pmid ? 'Ingesting...' : 'Ingest'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

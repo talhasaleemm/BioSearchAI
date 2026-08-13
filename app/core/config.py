@@ -62,12 +62,10 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": ".env", "extra": "ignore"}
 
-    from pydantic import model_validator
-    @model_validator(mode="after")
-    def validate_openai_key(self) -> 'Settings':
-        if not self.OPENAI_API_KEY or self.OPENAI_API_KEY.startswith("sk-please-replace-me"):
-            raise ValueError("OPENAI_API_KEY is required and must be set. Do not rely on dev-only defaults in production.")
-        return self
+    # Removed startup validator for OPENAI_API_KEY.
+    # Crashing on startup brings down the entire web service (including login/upload),
+    # resulting in a 502 Bad Gateway proxy response which triggers a CORS "Failed to fetch"
+    # on the frontend. Validation is now deferred to the RAG execution phase.
 
     # --- Resolved model identifiers (local path OR Hub ID) ----------------
 
