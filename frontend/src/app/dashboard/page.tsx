@@ -212,7 +212,7 @@ export default function DashboardPage() {
           <h2 className="text-xl font-semibold mb-6">Search & Ingest from PubMed</h2>
           
           {pubmedMessage && (
-            <div className={mb-6 p-4 rounded-lg border text-sm }>
+            <div className={`mb-6 p-4 rounded-lg border text-sm ${pubmedMessage.type === 'error' ? 'bg-red-50 text-red-900 border-red-200' : 'bg-green-50 text-green-900 border-green-200'}`}>
               {pubmedMessage.text}
             </div>
           )}
