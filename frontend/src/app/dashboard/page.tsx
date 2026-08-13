@@ -64,7 +64,7 @@ export default function DashboardPage() {
         method: 'POST',
         body: JSON.stringify({ pmid, session_id: sessionId }),
       });
-      setPubmedMessage({ type: 'success', text: PubMed abstract queued successfully! (ID: ) });
+      setPubmedMessage({ type: 'success', text: `PubMed abstract queued successfully! (ID: ${response.id})` });
     } catch (err: any) {
       setPubmedMessage({ type: 'error', text: err.message || 'Failed to ingest PubMed abstract' });
     } finally {
