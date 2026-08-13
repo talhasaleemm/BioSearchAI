@@ -43,8 +43,8 @@ class Settings(BaseSettings):
 
     CORS_ALLOWED_ORIGINS: str = "http://localhost:3000"
 
-    OPENAI_API_KEY: Optional[str] = "ollama"
-    OPENAI_API_BASE: str = "http://host.docker.internal:11434/v1"
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_BASE: Optional[str] = None
     HF_HUB_OFFLINE: int = 0
     DISABLE_BACKGROUND_TASKS: bool = False
     OPENAI_MODEL: str = "llama3.2:1b"
@@ -61,6 +61,13 @@ class Settings(BaseSettings):
     NER_MODEL_PATH: Optional[str] = "/app/.model_cache/biobert-ner-bc5cdr"
 
     model_config = {"env_file": ".env", "extra": "ignore"}
+
+    from pydantic import model_validator
+    @model_validator(mode="after")
+    def validate_openai_key(self) -> 'Settings':
+        if not self.OPENAI_API_KEY or self.OPENAI_API_KEY.startswith("sk-please-replace-me"):
+            raise ValueError("OPENAI_API_KEY is required and must be set. Do not rely on dev-only defaults in production.")
+        return self
 
     # --- Resolved model identifiers (local path OR Hub ID) ----------------
 
