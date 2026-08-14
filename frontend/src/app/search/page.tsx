@@ -42,6 +42,9 @@ export default function SearchPage() {
     setError('');
 
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30s timeout
+
       const token = sessionStorage.getItem('token');
       const response = await fetch(`${API_URL}/api/v1/rag/stream`, {
         method: 'POST',
@@ -54,10 +57,12 @@ export default function SearchPage() {
           top_k: 5,
           temperature: 0.2,
         }),
+        signal: controller.signal,
       });
+      clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error('Failed to start stream');
+        throw new Error(`Failed to start stream: ${response.statusText}`);
       }
 
       if (!response.body) {
@@ -90,7 +95,8 @@ export default function SearchPage() {
                 // Try parsing as JSON first (for the sources payload)
                 const parsed = JSON.parse(dataStr);
                 if (parsed.type === 'sources') {
-                  setSources(parsed.sources);
+                  const uniqueSources = Array.from(new Map(parsed.sources.map((s: any) => [s.text, s])).values());
+                  setSources(uniqueSources);
                 } else {
                   setAnswer((prev) => prev + dataStr);
                 }
@@ -103,7 +109,11 @@ export default function SearchPage() {
         }
       }
     } catch (err: any) {
-      setError(err.message || 'An error occurred during search');
+      if (err.name === 'AbortError') {
+        setError('Request timed out. The server took too long to respond.');
+      } else {
+        setError(err.message || 'An error occurred during search');
+      }
     } finally {
       setIsStreaming(false);
     }
