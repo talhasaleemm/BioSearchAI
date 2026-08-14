@@ -22,12 +22,6 @@ BioSearchAI streams grounded, fully-cited answers directly from PubMed abstracts
 
 [![BioSearchAI Demo](https://img.youtube.com/vi/_AZ_LPGhzWI/maxresdefault.jpg)](https://www.youtube.com/watch?v=_AZ_LPGhzWI)
 
-<br/>
-
-**System Architecture:**
-
-![System Architecture](./docs/architecture.jpg)
-
 ---
 
 ## ✨ Features
@@ -50,6 +44,10 @@ BioSearchAI moves beyond naive vector search by implementing a production-ready 
 4. **Dual Storage:** Embeddings are written to FAISS while document text, metadata, and sparse indices live in PostgreSQL.
 5. **Retrieval & Reranking:** Queries retrieve the top 25 chunks via Hybrid Search, and a Cross-Encoder narrows this to the absolute most relevant top-$K$ contexts.
 6. **Grounded Response:** The LLM generates a response strictly constrained to the provided context and streams it to the client.
+
+<br/>
+
+![BioSearchAI Architecture](./docs/architecture.jpg)
 
 ---
 
