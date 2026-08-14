@@ -173,7 +173,7 @@ export default function SearchPage() {
             </div>
           )}
 
-          {answer && (
+          {answer && !answer.includes('Answer generation is currently unavailable') && (
             <div className="animate-fade-in-up">
               <h3 className="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Generated Answer</h3>
               <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm prose prose-invert max-w-none text-slate-200 leading-relaxed">
