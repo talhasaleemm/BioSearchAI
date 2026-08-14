@@ -25,9 +25,8 @@ BioSearchAI streams grounded, fully-cited answers directly from PubMed abstracts
 <br/>
 
 **System Architecture:**
-<p align="center">
-  <img src="docs/architecture.jpg" alt="BioSearchAI Architecture" width="100%">
-</p>
+
+![System Architecture](./docs/architecture.jpg)
 
 ---
 
