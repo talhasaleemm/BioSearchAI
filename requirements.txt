@@ -26,3 +26,4 @@ datasets<3.0.0
 bioc
 seqeval>=1.2.2
 accelerate>=0.20
+python-multipart==0.0.9

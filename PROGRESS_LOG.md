@@ -1953,3 +1953,4 @@ conda clean --all --yes
 - Implemented frontend UI changes for a new PubMed search bar, result list, and ingest button on the dashboard.
 - Successfully verified the flow end-to-end locally with docker-compose: searched for "BRCA1 breast cancer", fetched structured abstracts, injected them into the worker pipeline, and confirmed they reached the processed status successfully with generated embeddings.
 - Code is verified and pending deployment to Railway/Vercel.
+- Note that the first Vercel deploy attempt failed due to two frontend syntax errors (missing template literal backticks), fixed and redeployed successfully.

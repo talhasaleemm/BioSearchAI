@@ -74,8 +74,8 @@ export default function DashboardPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !title) {
-      setMessage({ type: 'error', text: 'Please provide a title and select a file.' });
+    if (!file) {
+      setMessage({ type: 'error', text: 'Please select a file.' });
       return;
     }
 
@@ -83,22 +83,54 @@ export default function DashboardPage() {
     setMessage(null);
 
     try {
-      // Read file content as text
-      const content = await file.text();
+      const isPdf = file.name.toLowerCase().endsWith('.pdf');
 
-      // Send JSON payload
-      const response = await fetchApi('/api/v1/documents/ingest', {
-        method: 'POST',
-        body: JSON.stringify({
-          title,
-          source_type: 'upload',
-          source_url: sourceUrl || file.name,
-          content,
-          session_id: sessionId, // Use real session ID
-        }),
-      });
+      if (isPdf) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('session_id', sessionId!.toString());
 
-      setMessage({ type: 'success', text: `Document queued successfully! (ID: ${response.id})` });
+        const token = localStorage.getItem('token');
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/documents/pdf-ingest`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData,
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || 'Failed to upload PDF');
+        }
+        
+        const response = await res.json();
+        setMessage({ type: 'success', text: `PDF queued successfully! (ID: ${response.id})` });
+      } else {
+        if (!title) {
+          setMessage({ type: 'error', text: 'Please provide a title for text documents.' });
+          setIsUploading(false);
+          return;
+        }
+        
+        // Read file content as text
+        const content = await file.text();
+
+        // Send JSON payload
+        const response = await fetchApi('/api/v1/documents/ingest', {
+          method: 'POST',
+          body: JSON.stringify({
+            title,
+            source_type: 'upload',
+            source_url: sourceUrl || file.name,
+            content,
+            session_id: sessionId,
+          }),
+        });
+
+        setMessage({ type: 'success', text: `Document queued successfully! (ID: ${response.id})` });
+      }
+      
       setFile(null);
       setTitle('');
       setSourceUrl('');
@@ -145,7 +177,7 @@ export default function DashboardPage() {
 
             <form onSubmit={handleUpload} className="space-y-4">
               <div>
-                <label htmlFor="document-title" className="block text-sm font-medium text-slate-300 mb-1.5">Document Title</label>
+                <label htmlFor="document-title" className="block text-sm font-medium text-slate-300 mb-1.5">Document Title (Optional for PDF)</label>
                 <input
                   id="document-title"
                   type="text"
@@ -153,7 +185,6 @@ export default function DashboardPage() {
                   onChange={(e) => setTitle(e.target.value)}
                   className="w-full px-4 py-2.5 rounded-lg bg-black/20 border border-white/10 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-[var(--primary)] focus:border-transparent transition-all"
                   placeholder="e.g., Clinical Trial Results"
-                  required
                 />
               </div>
 
@@ -169,11 +200,11 @@ export default function DashboardPage() {
               </div>
 
               <div>
-                <label htmlFor="document-file" className="block text-sm font-medium text-slate-300 mb-1.5">File (.txt)</label>
+                <label htmlFor="document-file" className="block text-sm font-medium text-slate-300 mb-1.5">File (.txt, .md, .pdf)</label>
                 <input
                   id="document-file"
                   type="file"
-                  accept=".txt,.md"
+                  accept=".txt,.md,.pdf"
                   onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="w-full px-4 py-2.5 rounded-lg bg-black/20 border border-white/10 text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-[var(--primary)]/20 file:text-[var(--primary)] hover:file:bg-[var(--primary)]/30 transition-all cursor-pointer"
                   required
@@ -182,7 +213,7 @@ export default function DashboardPage() {
 
               <button
                 type="submit"
-                disabled={isUploading || !file || !title}
+                disabled={isUploading || !file}
                 className="w-full py-3 px-4 mt-2 rounded-lg bg-gradient-to-r from-[var(--primary)] to-[var(--primary-hover)] text-white font-medium shadow-lg shadow-[var(--primary)]/25 hover:shadow-[var(--primary)]/40 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isUploading ? 'Ingesting...' : 'Upload & Process'}

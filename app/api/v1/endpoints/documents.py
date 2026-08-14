@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Form
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -155,6 +155,63 @@ async def pubmed_ingest(
             id=document.id,
             status="pending",
             message="PubMed document queued for processing.",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/pdf-ingest", response_model=DocumentIngestResponse, status_code=status.HTTP_202_ACCEPTED)
+async def pdf_ingest(
+    file: UploadFile = File(...),
+    session_id: int = Form(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> DocumentIngestResponse:
+    """Ingest a PDF document, extract text in-memory, and trigger background processing."""
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="File must be a PDF")
+        
+    session = db.get(SearchSession, session_id)
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"SearchSession {session_id} not found.",
+        )
+        
+    try:
+        content = await file.read()
+        import fitz
+        doc = fitz.open(stream=content, filetype="pdf")
+        text_parts = []
+        for page in doc:
+            text = page.get_text()
+            if text:
+                text_parts.append(text)
+            
+        full_text = "\n\n".join(text_parts).strip()
+        if not full_text:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No extractable text found in PDF (might be a scanned image).")
+            
+        document = Document(
+            session_id=session_id,
+            title=file.filename,
+            source_url=None,
+            source_type="pdf",
+            content=full_text,
+            status="pending",
+        )
+        db.add(document)
+        db.commit()
+        db.refresh(document)
+        
+        process_document_task.delay(document.id)
+        
+        return DocumentIngestResponse(
+            id=document.id,
+            status="pending",
+            message="PDF document queued for processing.",
         )
     except HTTPException:
         raise
