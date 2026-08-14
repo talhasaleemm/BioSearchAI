@@ -131,4 +131,14 @@ class VectorRetriever:
         candidates = [item for item in candidates if item[2] >= MIN_SCORE_THRESHOLD]
         candidates.sort(key=lambda item: item[2], reverse=True)
         
-        return candidates[:top_k]
+        # Deduplicate by text to prevent identical chunks from dominating results
+        seen_texts = set()
+        deduped_candidates = []
+        for chunk, document, score in candidates:
+            if chunk.text not in seen_texts:
+                seen_texts.add(chunk.text)
+                deduped_candidates.append((chunk, document, score))
+                if len(deduped_candidates) == top_k:
+                    break
+        
+        return deduped_candidates
