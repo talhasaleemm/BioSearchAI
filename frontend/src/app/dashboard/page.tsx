@@ -3,7 +3,7 @@
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { fetchApi } from '@/lib/api';
+import { fetchApi, API_URL } from '@/lib/api';
 
 export default function DashboardPage() {
   const { user, sessionId, isAuthenticated, isLoading, logout } = useAuth();
@@ -91,7 +91,7 @@ export default function DashboardPage() {
         formData.append('session_id', sessionId!.toString());
 
         const token = localStorage.getItem('token');
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v1/documents/pdf-ingest`, {
+        const res = await fetch(`${API_URL}/api/v1/documents/pdf-ingest`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`
