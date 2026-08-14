@@ -22,13 +22,6 @@ BioSearchAI streams grounded, fully-cited answers directly from PubMed abstracts
 
 [![BioSearchAI Demo](https://img.youtube.com/vi/_AZ_LPGhzWI/maxresdefault.jpg)](https://www.youtube.com/watch?v=_AZ_LPGhzWI)
 
-<br/>
-
-**Live Next.js Streaming UI:**
-<p align="center">
-  <img src="docs/ui-screenshot.png" alt="BioSearchAI Live UI" width="100%">
-</p>
-
 ---
 
 ## ✨ Features
@@ -52,9 +45,7 @@ BioSearchAI moves beyond naive vector search by implementing a production-ready 
 5. **Retrieval & Reranking:** Queries retrieve the top 25 chunks via Hybrid Search, and a Cross-Encoder narrows this to the absolute most relevant top-$K$ contexts.
 6. **Grounded Response:** The LLM generates a response strictly constrained to the provided context and streams it to the client.
 
-<p align="center">
-  <img src="docs/architecture.jpg" alt="BioSearchAI Architecture" width="100%">
-</p>
+![BioSearchAI Architecture](./docs/architecture.jpg)
 
 ---
 
