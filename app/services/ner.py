@@ -2,7 +2,10 @@ import os
 import torch
 from transformers import AutoTokenizer, AutoModelForTokenClassification
 from typing import List, Dict, Any, Optional
+import logging
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 class NERService:
     def __init__(self):
@@ -18,12 +21,12 @@ class NERService:
             return
         self._initialized = True
         if not self.model_path:
-            print("NER model path is None (custom checkpoint not available on this host). "
+            logger.warning("NER model path is None (custom checkpoint not available on this host). "
                   "NER entity extraction will return empty results (graceful degradation).")
             return
 
         is_local = os.path.isdir(self.model_path)
-        print(f"Loading NER model from {self.model_path} (local={is_local})")
+        logger.info(f"Loading NER model from {self.model_path} (local={is_local})")
         try:
             self._tokenizer = AutoTokenizer.from_pretrained(
                 self.model_path, local_files_only=is_local, use_fast=True
@@ -33,12 +36,12 @@ class NERService:
             )
             self._model.eval()
             self._id2label = self._model.config.id2label
-            print(f"NER model loaded successfully from {self.model_path}")
+            logger.info(f"NER model loaded successfully from {self.model_path}")
         except (OSError, FileNotFoundError) as exc:
             # OSError/FileNotFoundError covers:
             # - local_files_only=True and files not present on disk
             # - HF Hub 404 / repo-not-found for a Hub path
-            print(
+            logger.warning(
                 f"NER model could not be loaded from '{self.model_path}' "
                 f"({type(exc).__name__}: {exc}). "
                 "NER entity extraction will return empty results (graceful degradation)."
@@ -48,7 +51,7 @@ class NERService:
         except Exception as exc:
             # Unexpected exception — log it prominently but do NOT silently eat it;
             # re-raise so it surfaces in the request error and Railway logs.
-            print(
+            logger.error(
                 f"UNEXPECTED error loading NER model from '{self.model_path}': "
                 f"{type(exc).__name__}: {exc}"
             )

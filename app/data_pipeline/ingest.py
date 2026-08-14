@@ -6,10 +6,13 @@ import os
 import time
 from dataclasses import dataclass
 from typing import List, Optional
+import logging
 from xml.etree import ElementTree as ET
 
 from Bio import Entrez
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 from app.models.document import Document
 from app.models.search_session import SearchSession
@@ -96,11 +99,11 @@ class PubMedIngestor:
                             )
                         )
                     except Exception as exc:
-                        print(f"Warning: failed to parse article: {exc}")
+                        logger.warning(f"Warning: failed to parse article: {exc}")
                         continue
                 return records
             except Exception as exc:
-                print(f"PubMed fetch attempt {attempt + 1} failed: {exc}")
+                logger.error(f"PubMed fetch attempt {attempt + 1} failed: {exc}")
                 time.sleep(2 ** attempt)
         return []
 
@@ -128,7 +131,7 @@ class PubMedIngestor:
                 self.db.add(doc)
                 saved += 1
             except Exception as exc:
-                print(f"Warning: failed to save document '{rec.title}': {exc}")
+                logger.warning(f"Warning: failed to save document '{rec.title}': {exc}")
                 continue
         self.db.commit()
         return saved
